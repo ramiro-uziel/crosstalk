@@ -20,6 +20,7 @@ import { Route as ApiTracksAnalyzeRouteImport } from './routes/api/tracks/analyz
 import { Route as ApiNucleusRenameRouteImport } from './routes/api/nucleus/rename'
 import { Route as ApiLyricsSearchRouteImport } from './routes/api/lyrics/search'
 import { Route as ApiChatMessageRouteImport } from './routes/api/chat/message'
+import { Route as ApiChatEmotionRouteImport } from './routes/api/chat/emotion'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as DemoStartSsrIndexRouteImport } from './routes/demo/start.ssr.index'
 import { Route as DemoStartSsrSpaModeRouteImport } from './routes/demo/start.ssr.spa-mode'
@@ -81,6 +82,11 @@ const ApiChatMessageRoute = ApiChatMessageRouteImport.update({
   path: '/api/chat/message',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiChatEmotionRoute = ApiChatEmotionRouteImport.update({
+  id: '/api/chat/emotion',
+  path: '/api/chat/emotion',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -111,6 +117,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/demo/better-auth': typeof DemoBetterAuthRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/chat/emotion': typeof ApiChatEmotionRoute
   '/api/chat/message': typeof ApiChatMessageRoute
   '/api/lyrics/search': typeof ApiLyricsSearchRoute
   '/api/nucleus/rename': typeof ApiNucleusRenameRoute
@@ -129,6 +136,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/demo/better-auth': typeof DemoBetterAuthRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/chat/emotion': typeof ApiChatEmotionRoute
   '/api/chat/message': typeof ApiChatMessageRoute
   '/api/lyrics/search': typeof ApiLyricsSearchRoute
   '/api/nucleus/rename': typeof ApiNucleusRenameRoute
@@ -148,6 +156,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/demo/better-auth': typeof DemoBetterAuthRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/chat/emotion': typeof ApiChatEmotionRoute
   '/api/chat/message': typeof ApiChatMessageRoute
   '/api/lyrics/search': typeof ApiLyricsSearchRoute
   '/api/nucleus/rename': typeof ApiNucleusRenameRoute
@@ -168,6 +177,7 @@ export interface FileRouteTypes {
     | '/'
     | '/demo/better-auth'
     | '/api/auth/$'
+    | '/api/chat/emotion'
     | '/api/chat/message'
     | '/api/lyrics/search'
     | '/api/nucleus/rename'
@@ -186,6 +196,7 @@ export interface FileRouteTypes {
     | '/'
     | '/demo/better-auth'
     | '/api/auth/$'
+    | '/api/chat/emotion'
     | '/api/chat/message'
     | '/api/lyrics/search'
     | '/api/nucleus/rename'
@@ -204,6 +215,7 @@ export interface FileRouteTypes {
     | '/'
     | '/demo/better-auth'
     | '/api/auth/$'
+    | '/api/chat/emotion'
     | '/api/chat/message'
     | '/api/lyrics/search'
     | '/api/nucleus/rename'
@@ -223,6 +235,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DemoBetterAuthRoute: typeof DemoBetterAuthRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiChatEmotionRoute: typeof ApiChatEmotionRoute
   ApiChatMessageRoute: typeof ApiChatMessageRoute
   ApiLyricsSearchRoute: typeof ApiLyricsSearchRoute
   ApiNucleusRenameRoute: typeof ApiNucleusRenameRoute
@@ -317,6 +330,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatMessageRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/chat/emotion': {
+      id: '/api/chat/emotion'
+      path: '/api/chat/emotion'
+      fullPath: '/api/chat/emotion'
+      preLoaderRoute: typeof ApiChatEmotionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -359,6 +379,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DemoBetterAuthRoute: DemoBetterAuthRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiChatEmotionRoute: ApiChatEmotionRoute,
   ApiChatMessageRoute: ApiChatMessageRoute,
   ApiLyricsSearchRoute: ApiLyricsSearchRoute,
   ApiNucleusRenameRoute: ApiNucleusRenameRoute,

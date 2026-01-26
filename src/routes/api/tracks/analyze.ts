@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { extractSpotifyTrackId, fetchSpotifyMetadata, downloadPreviewMp3 } from '../../../lib/spotify'
-import { analyzeAudioFile, analyzeSpotifyEmbed } from '../../../lib/gemini'
+import { extractSpotifyTrackId, fetchSpotifyMetadata } from '../../../lib/spotify'
+import { analyzeLyrics } from '../../../lib/gemini'
 import { searchGeniusLyrics } from '../../../lib/genius'
 import { trackQueries } from '../../../lib/database'
 import type { Track } from '../../../types/track'
@@ -12,10 +12,10 @@ export const Route = createFileRoute('/api/tracks/analyze')({
         try {
           const { spotifyUrl } = await request.json()
 
-          const clientId = process.env.SPOTIFY_CLIENT_ID
-          const clientSecret = process.env.SPOTIFY_CLIENT_SECRET
-          const geminiApiKey = process.env.GEMINI_API_KEY
-          const geniusToken = process.env.GENIUS_ACCESS_TOKEN
+          const clientId = process.env.VITE_SPOTIFY_CLIENT_ID
+          const clientSecret = process.env.VITE_SPOTIFY_CLIENT_SECRET
+          const geminiApiKey = process.env.VITE_GEMINI_API_KEY
+          const geniusToken = process.env.VITE_GENIUS_ACCESS_TOKEN
 
           if (!clientId || !clientSecret || !geminiApiKey) {
             return new Response(
@@ -40,24 +40,10 @@ export const Route = createFileRoute('/api/tracks/analyze')({
             )
           }
 
+          // Step 1: Fetch Spotify metadata
           const metadata = await fetchSpotifyMetadata(trackId, clientId, clientSecret)
 
-          let analysis
-          let hasPreview = false
-
-          if (metadata.preview_url) {
-            try {
-              const audioBuffer = await downloadPreviewMp3(metadata.preview_url)
-              analysis = await analyzeAudioFile(audioBuffer, geminiApiKey)
-              hasPreview = true
-            } catch (error) {
-              console.error('Failed to analyze audio file, falling back to embed:', error)
-              analysis = await analyzeSpotifyEmbed(spotifyUrl, geminiApiKey)
-            }
-          } else {
-            analysis = await analyzeSpotifyEmbed(spotifyUrl, geminiApiKey)
-          }
-
+          // Step 2: Search Genius for lyrics
           let lyrics = null
           let geniusUrl = null
 
@@ -67,9 +53,26 @@ export const Route = createFileRoute('/api/tracks/analyze')({
               metadata.artists[0]?.name || '',
               geniusToken
             )
+            console.log(lyricsResult);
             lyrics = lyricsResult.lyrics
             geniusUrl = lyricsResult.url
           }
+
+          // Step 3: If no lyrics, return 422 error
+          if (!lyrics) {
+            return new Response(
+              JSON.stringify({ error: 'No lyrics found for this track. Unable to analyze emotion.' }),
+              { status: 422, headers: { 'Content-Type': 'application/json' } }
+            )
+          }
+
+          // Step 4: Analyze lyrics with Gemini
+          const analysis = await analyzeLyrics(
+            lyrics,
+            metadata.name,
+            metadata.artists[0]?.name || '',
+            geminiApiKey
+          )
 
           const thumbnailUrl = metadata.album.images[0]?.url || null
 
@@ -80,14 +83,14 @@ export const Route = createFileRoute('/api/tracks/analyze')({
             metadata.artists[0]?.name || null,
             lyrics,
             geniusUrl,
-            hasPreview ? 1 : 0,
+            metadata.preview_url ? 1 : 0,
             analysis.emotion,
             analysis.valence,
             analysis.energy,
-            analysis.tempo,
+            analysis.tempo || null,
             analysis.genre,
             analysis.mood_description,
-            analysis.dominant_instruments,
+            analysis.dominant_instruments || null,
             analysis.vocal_characteristics,
             metadata.duration_ms,
             thumbnailUrl

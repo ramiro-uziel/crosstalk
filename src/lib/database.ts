@@ -32,7 +32,8 @@ db.exec(`
     role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
     content TEXT NOT NULL,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    nucleus_name TEXT
+    nucleus_name TEXT,
+    emotion TEXT DEFAULT NULL
   );
 
   CREATE TABLE IF NOT EXISTS nucleus_metadata (
@@ -45,6 +46,13 @@ db.exec(`
 
   INSERT OR IGNORE INTO nucleus_metadata (id, name) VALUES (1, 'The Nucleus');
 `)
+
+// Add emotion column to chat_messages if it doesn't exist
+try {
+  db.exec(`ALTER TABLE chat_messages ADD COLUMN emotion TEXT DEFAULT NULL;`)
+} catch (e) {
+  // Column already exists, ignore
+}
 
 export const trackQueries = {
   getAll: db.prepare('SELECT * FROM tracks ORDER BY added_at DESC'),
@@ -67,6 +75,10 @@ export const chatQueries = {
   getRecent: db.prepare('SELECT * FROM chat_messages ORDER BY timestamp DESC LIMIT ?'),
   insert: db.prepare('INSERT INTO chat_messages (role, content, nucleus_name) VALUES (?, ?, ?)'),
   deleteAll: db.prepare('DELETE FROM chat_messages'),
+  // Emotion-specific queries
+  getByEmotion: db.prepare('SELECT * FROM chat_messages WHERE emotion = ? ORDER BY timestamp ASC'),
+  getRecentByEmotion: db.prepare('SELECT * FROM chat_messages WHERE emotion = ? ORDER BY timestamp DESC LIMIT ?'),
+  insertWithEmotion: db.prepare('INSERT INTO chat_messages (role, content, nucleus_name, emotion) VALUES (?, ?, ?, ?)'),
 }
 
 export const nucleusQueries = {

@@ -4,6 +4,7 @@ export interface ChatMessage {
   content: string
   timestamp: string
   nucleus_name: string | null
+  emotion?: string | null
 }
 
 export interface NucleusMetadata {
