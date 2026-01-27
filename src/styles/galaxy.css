@@ -1340,8 +1340,9 @@ input[type="color"]::-moz-color-swatch {
 /* Track Tooltip - Lidar Aesthetic */
 .track-tooltip {
   position: fixed;
-  right: 340px;
-  top: 20px;
+  right: 420px;
+  top: 50%;
+  transform: translateY(-50%);
   background: #000;
   border: 1px solid rgba(255, 255, 255, 0.3);
   padding: 0;
@@ -1375,11 +1376,11 @@ input[type="color"]::-moz-color-swatch {
 @keyframes tooltipSlideIn {
   from {
     opacity: 0;
-    transform: translateY(-20px);
+    transform: translate(20px, -50%);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate(0, -50%);
   }
 }
 
@@ -1470,6 +1471,7 @@ input[type="color"]::-moz-color-swatch {
   letter-spacing: 1px;
   cursor: pointer;
   transition: all 0.2s;
+  margin-top: 16px;
 }
 
 .track-tooltip .tooltip-close:hover {

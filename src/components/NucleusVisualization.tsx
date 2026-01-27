@@ -131,6 +131,7 @@ const createDitheringShader = () => ({
 
 export interface NucleusVisualizationHandle {
   resetCamera: () => void
+  getTrackScreenPosition: (trackId: number) => { x: number; y: number } | null
 }
 
 export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, NucleusVisualizationProps>(function NucleusVisualization({ tracks, onOrbitClick, onTrackClick, isAudioPlaying, audioEnergy, audioTempo }, ref) {
@@ -177,6 +178,27 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
         }
       }
       animateReset()
+    },
+    getTrackScreenPosition: (trackId: number) => {
+      const camera = cameraRef.current
+      const renderer = rendererRef.current
+      const trackPoint = trackPointsRef.current.get(trackId)
+
+      if (!camera || !renderer || !trackPoint) return null
+
+      // Get world position of the track
+      const worldPos = new THREE.Vector3()
+      trackPoint.group.getWorldPosition(worldPos)
+
+      // Project to screen coordinates
+      const screenPos = worldPos.clone().project(camera)
+
+      // Convert to pixel coordinates
+      const canvas = renderer.domElement
+      const x = (screenPos.x * 0.5 + 0.5) * canvas.clientWidth
+      const y = (-(screenPos.y * 0.5) + 0.5) * canvas.clientHeight
+
+      return { x, y }
     },
   }))
 
@@ -266,7 +288,7 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
   const createNucleus = useCallback(() => {
     const group = new THREE.Group()
 
-    // === CORE: bright glowing sphere ===
+    // === CORE: bright glowing sphere with halftone effect ===
     const coreGeo = new THREE.SphereGeometry(0.1, 24, 24)
     const coreMat = new THREE.ShaderMaterial({
       uniforms: {
