@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { Music, Sparkles, Plus, Trash2, MessageCircle, ChevronDown, ChevronUp, Pause, Play, Volume2, X } from 'lucide-react'
+import { Music, Sparkles, Plus, Trash2, ChevronDown, ChevronUp, Pause, Play, Volume2, X } from 'lucide-react'
 import { NucleusVisualization } from '../components/NucleusVisualization'
 import type { NucleusVisualizationHandle } from '../components/NucleusVisualization'
 import { NucleusChat } from '../components/NucleusChat'
@@ -57,15 +57,18 @@ function App() {
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null)
   const [selectedOrbit, setSelectedOrbit] = useState<number | null>(null)
+  const [trackScreenPos, setTrackScreenPos] = useState<{ x: number; y: number } | null>(null)
+  const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null)
+  const [isTooltipReady, setIsTooltipReady] = useState(false)
 
   const visualizationRef = useRef<NucleusVisualizationHandle>(null)
+  const tooltipRef = useRef<HTMLDivElement>(null)
 
   // YouTube audio playback state
   const [playingTrack, setPlayingTrack] = useState<Track | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isLoadingVideo, setIsLoadingVideo] = useState(false)
-  const [showTrackChangeConfirm, setShowTrackChangeConfirm] = useState(false)
-  const [pendingTrack, setPendingTrack] = useState<Track | null>(null)
+  const [showSwitchConfirm, setShowSwitchConfirm] = useState(false)
   const [seekProgress, setSeekProgress] = useState(0)
   const [seekDuration, setSeekDuration] = useState(0)
   const seekIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -214,32 +217,13 @@ function App() {
     setSeekDuration(0)
   }, [])
 
-  const handleTrackClickForAudio = useCallback((track: Track) => {
-    if (!playingTrack) {
-      // Nothing playing - start playing
-      playTrack(track)
-    } else if (playingTrack.id === track.id) {
-      // Same track - toggle play/pause
-      togglePlayback()
-    } else {
-      // Different track playing - ask to confirm change
-      setPendingTrack(track)
-      setShowTrackChangeConfirm(true)
-    }
-  }, [playingTrack, playTrack, togglePlayback])
-
   const confirmTrackChange = useCallback(() => {
-    if (pendingTrack) {
-      playTrack(pendingTrack)
+    if (selectedTrack) {
+      playTrack(selectedTrack)
+      setShowSwitchConfirm(false)
+      // Keep modal open - don't close it
     }
-    setShowTrackChangeConfirm(false)
-    setPendingTrack(null)
-  }, [pendingTrack, playTrack])
-
-  const cancelTrackChange = useCallback(() => {
-    setShowTrackChangeConfirm(false)
-    setPendingTrack(null)
-  }, [])
+  }, [selectedTrack, playTrack])
 
   const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const time = parseFloat(e.target.value)
@@ -258,6 +242,69 @@ function App() {
       }
     }
   }, [])
+
+  // Track the tooltip's center position
+  useEffect(() => {
+    if (!selectedTrack) {
+      setIsTooltipReady(false)
+      setTooltipPosition(null)
+      return
+    }
+
+    // Wait for tooltip to be rendered and positioned
+    const timeoutId = setTimeout(() => {
+      if (tooltipRef.current) {
+        const rect = tooltipRef.current.getBoundingClientRect()
+        setTooltipPosition({
+          x: rect.left,
+          y: rect.top + rect.height / 2,
+        })
+        setIsTooltipReady(true)
+      }
+    }, 50)
+
+    const updateTooltipPosition = () => {
+      if (tooltipRef.current) {
+        const rect = tooltipRef.current.getBoundingClientRect()
+        setTooltipPosition({
+          x: rect.left,
+          y: rect.top + rect.height / 2,
+        })
+      }
+    }
+
+    // Update on resize
+    window.addEventListener('resize', updateTooltipPosition)
+
+    return () => {
+      clearTimeout(timeoutId)
+      window.removeEventListener('resize', updateTooltipPosition)
+    }
+  }, [selectedTrack])
+
+  // Track the selected track's screen position
+  useEffect(() => {
+    if (!selectedTrack) {
+      setTrackScreenPos(null)
+      return
+    }
+
+    let animationFrameId: number
+
+    const updatePosition = () => {
+      if (visualizationRef.current && selectedTrack) {
+        const pos = visualizationRef.current.getTrackScreenPosition(selectedTrack.id)
+        setTrackScreenPos(pos)
+      }
+      animationFrameId = requestAnimationFrame(updatePosition)
+    }
+
+    updatePosition()
+
+    return () => {
+      cancelAnimationFrame(animationFrameId)
+    }
+  }, [selectedTrack])
 
   // Track card expansion state
   const [expandedTracks, setExpandedTracks] = useState<Set<number>>(new Set())
@@ -372,8 +419,29 @@ function App() {
   }
 
   const handleTrackClick = (track: Track) => {
+    // If clicking the same track that's already selected, close the modal
+    if (selectedTrack?.id === track.id) {
+      setSelectedTrack(null)
+      setShowSwitchConfirm(false)
+      visualizationRef.current?.resetCamera()
+      return
+    }
+
+    // Select the track and show modal
     setSelectedTrack(track)
-    handleTrackClickForAudio(track)
+    setShowSwitchConfirm(false)
+
+    // Handle audio playback
+    if (!playingTrack) {
+      // Nothing playing - start playing this track
+      playTrack(track)
+    } else if (playingTrack.id === track.id) {
+      // Same track already playing - just show modal, don't toggle playback
+      // User can use the player controls if they want to pause
+    } else {
+      // Different track playing - show switch confirmation in tooltip
+      setShowSwitchConfirm(true)
+    }
   }
 
   // Sort tracks by added_at (newest first)
@@ -410,62 +478,44 @@ function App() {
           tracks={tracks}
           onOrbitClick={handleOrbitClick}
           onTrackClick={handleTrackClick}
+          onNucleusClick={() => setIsChatOpen(!isChatOpen)}
           isAudioPlaying={isPlaying}
           audioEnergy={playingTrack?.energy ?? undefined}
           audioTempo={playingTrack?.tempo ?? undefined}
         />
       </div>
 
-      {/* Header */}
-      <header className="fixed top-0 left-0 right-80 z-50 bg-black/90 backdrop-blur-sm border-b border-white/20 p-4">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <Music className="w-8 h-8 text-white" />
-            <div>
-              <h1 className="text-2xl font-bold text-white">
-                {nucleusName}
-              </h1>
-            </div>
-          </div>
-          <button
-            onClick={() => setIsChatOpen(!isChatOpen)}
-            className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/30 transition-colors text-white font-mono"
-          >
-            <MessageCircle className="w-5 h-5" />
-            Chat
-          </button>
-        </div>
-
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={spotifyUrl}
-            onChange={e => setSpotifyUrl(e.target.value)}
-            onKeyPress={e => e.key === 'Enter' && addTrack()}
-            placeholder="Paste Spotify track URL..."
-            className="flex-1 bg-black border border-white/30 px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-white font-mono"
-            disabled={isAnalyzing}
-          />
-          <button
-            onClick={addTrack}
-            disabled={!spotifyUrl.trim() || isAnalyzing}
-            className="px-6 py-2 bg-white text-black hover:bg-gray-200 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors flex items-center gap-2 font-semibold font-mono"
-          >
-            <Plus className="w-5 h-5" />
-            {isAnalyzing ? 'Analyzing...' : 'Add Track'}
-          </button>
-        </div>
-
-        {error && (
-          <div className="mt-2 text-white text-sm font-mono border border-white/50 bg-white/10 p-2">
-            {error}
-          </div>
-        )}
-      </header>
-
       {/* Sidebar */}
-      <div className="fixed right-0 top-0 w-80 h-screen bg-black border-l border-white/20 overflow-y-auto z-40 pt-8">
-        <div className="pb-4 px-4">
+      <div className="fixed right-0 top-0 w-80 h-screen bg-black border-l border-white/20 overflow-y-auto z-40">
+        <div className="pb-4 px-4 pt-4">
+          {/* Add Track Input */}
+          <div className="mb-4">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={spotifyUrl}
+                onChange={e => setSpotifyUrl(e.target.value)}
+                onKeyPress={e => e.key === 'Enter' && addTrack()}
+                placeholder="Paste Spotify URL..."
+                className="flex-1 bg-black border border-white/30 px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-white font-mono"
+                disabled={isAnalyzing}
+              />
+              <button
+                onClick={addTrack}
+                disabled={!spotifyUrl.trim() || isAnalyzing}
+                className="px-3 py-2 bg-white text-black hover:bg-gray-200 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors flex items-center gap-1 font-semibold font-mono text-sm"
+              >
+                <Plus className="w-4 h-4" />
+                {isAnalyzing ? '...' : 'Add'}
+              </button>
+            </div>
+            {error && (
+              <div className="mt-2 text-white text-xs font-mono border border-white/50 bg-white/10 p-2">
+                {error}
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold flex items-center gap-2 text-white font-mono">
               <Sparkles className="w-5 h-5" />
@@ -552,9 +602,110 @@ function App() {
         </div>
       </div>
 
+      {/* SVG overlay for pointer line */}
+      {selectedTrack && trackScreenPos && tooltipPosition && isTooltipReady && (
+        <svg
+          className="fixed inset-0 pointer-events-none z-[999]"
+          style={{
+            width: '100vw',
+            height: '100vh',
+            opacity: 1,
+            transition: 'opacity 0.2s ease-in'
+          }}
+        >
+          <defs>
+            <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="rgba(255, 255, 255, 0.2)" />
+              <stop offset="50%" stopColor="rgba(255, 255, 255, 0.4)" />
+              <stop offset="100%" stopColor="rgba(255, 255, 255, 0.7)" />
+              <animate attributeName="x1" values="0%;20%;0%" dur="3s" repeatCount="indefinite" />
+            </linearGradient>
+          </defs>
+          {/* Line from modal to sphere */}
+          <line
+            x1={tooltipPosition.x}
+            y1={tooltipPosition.y}
+            x2={trackScreenPos.x}
+            y2={trackScreenPos.y}
+            stroke="url(#lineGradient)"
+            strokeWidth="1.5"
+            strokeDasharray="5 3"
+            opacity="0.7"
+          >
+            <animate
+              attributeName="stroke-dashoffset"
+              from="0"
+              to="16"
+              dur="1s"
+              repeatCount="indefinite"
+            />
+          </line>
+          {/* Glow line underneath */}
+          <line
+            x1={tooltipPosition.x}
+            y1={tooltipPosition.y}
+            x2={trackScreenPos.x}
+            y2={trackScreenPos.y}
+            stroke="rgba(255, 255, 255, 0.2)"
+            strokeWidth="3"
+            opacity="0.3"
+            style={{ filter: 'blur(2px)' }}
+          />
+          {/* Dot at sphere position */}
+          <circle
+            cx={trackScreenPos.x}
+            cy={trackScreenPos.y}
+            r="4"
+            fill="white"
+            opacity="0.9"
+            style={{
+              filter: 'drop-shadow(0 0 6px rgba(255, 255, 255, 0.9))',
+            }}
+          >
+            <animate
+              attributeName="r"
+              values="4;5;4"
+              dur="2s"
+              repeatCount="indefinite"
+            />
+          </circle>
+          {/* Outer ring at sphere */}
+          <circle
+            cx={trackScreenPos.x}
+            cy={trackScreenPos.y}
+            r="8"
+            fill="none"
+            stroke="white"
+            strokeWidth="1"
+            opacity="0.3"
+          >
+            <animate
+              attributeName="r"
+              values="8;12;8"
+              dur="2s"
+              repeatCount="indefinite"
+            />
+            <animate
+              attributeName="opacity"
+              values="0.3;0.1;0.3"
+              dur="2s"
+              repeatCount="indefinite"
+            />
+          </circle>
+          {/* Dot at modal connection */}
+          <circle
+            cx={tooltipPosition.x}
+            cy={tooltipPosition.y}
+            r="3"
+            fill="white"
+            opacity="0.7"
+          />
+        </svg>
+      )}
+
       {/* Track tooltip */}
       {selectedTrack && (
-        <div className="track-tooltip">
+        <div ref={tooltipRef} className="track-tooltip">
           <div className="tooltip-header">
             <div className="tooltip-icon" />
             <h3 className="tooltip-title">{selectedTrack.title}</h3>
@@ -570,9 +721,25 @@ function App() {
             {selectedTrack.mood_description && (
               <p className="tooltip-mood">{selectedTrack.mood_description}</p>
             )}
+
+            {/* Switch track confirmation */}
+            {showSwitchConfirm && playingTrack && (
+              <div className="mt-4 pt-4 border-t border-white/20">
+                <p className="text-white text-xs mb-2 font-mono">Currently playing:</p>
+                <p className="text-white/60 text-xs mb-3 font-mono">{playingTrack.title} - {playingTrack.artist}</p>
+                <button
+                  onClick={confirmTrackChange}
+                  className="w-full px-3 py-2 bg-white text-black text-sm hover:bg-gray-200 transition-colors font-mono"
+                >
+                  Switch to this
+                </button>
+              </div>
+            )}
+
             <button
               onClick={() => {
                 setSelectedTrack(null)
+                setShowSwitchConfirm(false)
                 visualizationRef.current?.resetCamera()
               }}
               className="tooltip-close"
@@ -639,32 +806,6 @@ function App() {
             >
               <X className="w-4 h-4" />
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* Track change confirmation dialog */}
-      {showTrackChangeConfirm && pendingTrack && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="bg-black border border-white/30 p-6 max-w-sm mx-4 font-mono">
-            <p className="text-white text-sm mb-1">Currently playing:</p>
-            <p className="text-white/60 text-xs mb-3">{playingTrack?.title} - {playingTrack?.artist}</p>
-            <p className="text-white text-sm mb-1">Switch to:</p>
-            <p className="text-white/60 text-xs mb-5">{pendingTrack.title} - {pendingTrack.artist}</p>
-            <div className="flex gap-2">
-              <button
-                onClick={confirmTrackChange}
-                className="flex-1 px-4 py-2 bg-white text-black text-sm hover:bg-gray-200 transition-colors"
-              >
-                Switch
-              </button>
-              <button
-                onClick={cancelTrackChange}
-                className="flex-1 px-4 py-2 bg-black text-white text-sm border border-white/30 hover:border-white transition-colors"
-              >
-                Keep current
-              </button>
-            </div>
           </div>
         </div>
       )}

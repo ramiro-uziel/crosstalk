@@ -22,6 +22,21 @@ export const Route = createFileRoute('/api/chat/')({
           )
         }
       },
+      DELETE: async () => {
+        try {
+          chatQueries.deleteAll.run()
+          return new Response(
+            JSON.stringify({ success: true }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          )
+        } catch (error) {
+          console.error('Error clearing chat messages:', error)
+          return new Response(
+            JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+            { status: 500, headers: { 'Content-Type': 'application/json' } }
+          )
+        }
+      },
     },
   },
 })

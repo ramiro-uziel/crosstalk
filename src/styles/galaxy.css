@@ -1340,8 +1340,9 @@ input[type="color"]::-moz-color-swatch {
 /* Track Tooltip - Lidar Aesthetic */
 .track-tooltip {
   position: fixed;
-  right: 340px;
-  top: 20px;
+  right: 420px;
+  top: 50%;
+  transform: translateY(-50%);
   background: #000;
   border: 1px solid rgba(255, 255, 255, 0.3);
   padding: 0;
@@ -1375,11 +1376,11 @@ input[type="color"]::-moz-color-swatch {
 @keyframes tooltipSlideIn {
   from {
     opacity: 0;
-    transform: translateY(-20px);
+    transform: translate(20px, -50%);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate(0, -50%);
   }
 }
 
@@ -1470,11 +1471,284 @@ input[type="color"]::-moz-color-swatch {
   letter-spacing: 1px;
   cursor: pointer;
   transition: all 0.2s;
+  margin-top: 16px;
 }
 
 .track-tooltip .tooltip-close:hover {
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* ============================================
+   NUCLEUS CHAT POPUP - Track Tooltip Style
+   ============================================ */
+
+.nucleus-chat-popup {
+  position: fixed;
+  /* Center within the left panel (viewport minus 320px sidebar) */
+  left: calc((100vw - 320px) / 2);
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 400px;
+  max-height: 70vh;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  font-family: "JetBrains Mono", monospace;
+  color: #fff;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  animation: chatPopupIn 0.3s ease-out;
+}
+
+.nucleus-chat-popup .nucleus-chat-scanlines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 255, 255, 0.03) 2px,
+    rgba(255, 255, 255, 0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+@keyframes chatPopupIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.nucleus-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  position: relative;
+  z-index: 2;
+}
+
+.nucleus-chat-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nucleus-chat-icon {
+  width: 8px;
+  height: 8px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #fff, 0 0 20px #fff;
+  animation: lidarPulse 1s ease-in-out infinite;
+}
+
+.nucleus-chat-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: #fff;
+  text-transform: uppercase;
+}
+
+.nucleus-chat-header-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nucleus-chat-reset-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  padding: 6px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nucleus-chat-reset-btn:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.nucleus-chat-close-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  padding: 6px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nucleus-chat-close-btn:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.nucleus-chat-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.2);
+  margin: 0;
+}
+
+.nucleus-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 200px;
+  max-height: 400px;
+  position: relative;
+  z-index: 2;
+}
+
+.nucleus-chat-empty {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+  margin-top: 40px;
+  letter-spacing: 1px;
+}
+
+.nucleus-chat-empty-sub {
+  font-size: 10px;
+  margin-top: 8px;
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.nucleus-chat-msg {
+  max-width: 85%;
+  padding: 10px 14px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.nucleus-chat-msg-user {
+  align-self: flex-end;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.nucleus-chat-msg-assistant {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.nucleus-chat-msg-text {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.nucleus-chat-loading {
+  display: flex;
+  gap: 4px;
+}
+
+.nucleus-chat-dot {
+  width: 5px;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  animation: chatDotPulse 1.2s ease-in-out infinite;
+}
+
+.nucleus-chat-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.nucleus-chat-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes chatDotPulse {
+  0%, 100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.nucleus-chat-input-area {
+  display: flex;
+  gap: 8px;
+  padding: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  position: relative;
+  z-index: 2;
+}
+
+.nucleus-chat-input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 10px 12px;
+  color: #fff;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  resize: none;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.nucleus-chat-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.nucleus-chat-input:focus {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.nucleus-chat-input:disabled {
+  opacity: 0.5;
+}
+
+.nucleus-chat-send {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nucleus-chat-send:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.nucleus-chat-send:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 /* Orbit indicator styles */

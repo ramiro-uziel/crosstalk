@@ -42,6 +42,7 @@ interface NucleusVisualizationProps {
   tracks: Track[]
   onOrbitClick?: (orbitInfo: OrbitInfo | null) => void
   onTrackClick?: (track: Track) => void
+  onNucleusClick?: () => void
   isAudioPlaying?: boolean
   audioEnergy?: number
   audioTempo?: number
@@ -131,9 +132,10 @@ const createDitheringShader = () => ({
 
 export interface NucleusVisualizationHandle {
   resetCamera: () => void
+  getTrackScreenPosition: (trackId: number) => { x: number; y: number } | null
 }
 
-export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, NucleusVisualizationProps>(function NucleusVisualization({ tracks, onOrbitClick, onTrackClick, isAudioPlaying, audioEnergy, audioTempo }, ref) {
+export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, NucleusVisualizationProps>(function NucleusVisualization({ tracks, onOrbitClick, onTrackClick, onNucleusClick, isAudioPlaying, audioEnergy, audioTempo }, ref) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
@@ -177,6 +179,27 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
         }
       }
       animateReset()
+    },
+    getTrackScreenPosition: (trackId: number) => {
+      const camera = cameraRef.current
+      const renderer = rendererRef.current
+      const trackPoint = trackPointsRef.current.get(trackId)
+
+      if (!camera || !renderer || !trackPoint) return null
+
+      // Get world position of the track
+      const worldPos = new THREE.Vector3()
+      trackPoint.group.getWorldPosition(worldPos)
+
+      // Project to screen coordinates
+      const screenPos = worldPos.clone().project(camera)
+
+      // Convert to pixel coordinates
+      const canvas = renderer.domElement
+      const x = (screenPos.x * 0.5 + 0.5) * canvas.clientWidth
+      const y = (-(screenPos.y * 0.5) + 0.5) * canvas.clientHeight
+
+      return { x, y }
     },
   }))
 
@@ -223,6 +246,7 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
   // Store callbacks in refs so they can be updated without recreating the scene
   const onOrbitClickRef = useRef(onOrbitClick)
   const onTrackClickRef = useRef(onTrackClick)
+  const onNucleusClickRef = useRef(onNucleusClick)
 
   // Keep callback refs up to date
   useEffect(() => {
@@ -232,6 +256,10 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
   useEffect(() => {
     onTrackClickRef.current = onTrackClick
   }, [onTrackClick])
+
+  useEffect(() => {
+    onNucleusClickRef.current = onNucleusClick
+  }, [onNucleusClick])
 
   // Sort tracks by added_at (newest first)
   const sortedTracks = useMemo(() => {
@@ -266,19 +294,83 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
   const createNucleus = useCallback(() => {
     const group = new THREE.Group()
 
-    // === CORE: bright glowing sphere ===
-    const coreGeo = new THREE.SphereGeometry(0.1, 24, 24)
+    // === CORE: bright glowing sphere with faded edges and noise displacement ===
+    const coreGeo = new THREE.SphereGeometry(0.1, 32, 32)
     const coreMat = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0.0 },
         uAudioPulse: { value: 0.0 },
       },
       vertexShader: `
+        uniform float uTime;
+        uniform float uAudioPulse;
         varying vec3 vNormal;
         varying vec3 vViewDir;
+        varying float vDisplacement;
+
+        // Simplex noise for vertex displacement
+        vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+        vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+        float snoise(vec3 v) {
+          const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+          const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+          vec3 i  = floor(v + dot(v, C.yyy));
+          vec3 x0 = v - i + dot(i, C.xxx);
+          vec3 g = step(x0.yzx, x0.xyz);
+          vec3 l = 1.0 - g;
+          vec3 i1 = min(g.xyz, l.zxy);
+          vec3 i2 = max(g.xyz, l.zxy);
+          vec3 x1 = x0 - i1 + C.xxx;
+          vec3 x2 = x0 - i2 + C.yyy;
+          vec3 x3 = x0 - D.yyy;
+          i = mod289(i);
+          vec4 p = permute(permute(permute(
+                    i.z + vec4(0.0, i1.z, i2.z, 1.0))
+                  + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+                  + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+          float n_ = 0.142857142857;
+          vec3 ns = n_ * D.wyz - D.xzx;
+          vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+          vec4 x_ = floor(j * ns.z);
+          vec4 y_ = floor(j - 7.0 * x_);
+          vec4 x = x_ *ns.x + ns.yyyy;
+          vec4 y = y_ *ns.x + ns.yyyy;
+          vec4 h = 1.0 - abs(x) - abs(y);
+          vec4 b0 = vec4(x.xy, y.xy);
+          vec4 b1 = vec4(x.zw, y.zw);
+          vec4 s0 = floor(b0)*2.0 + 1.0;
+          vec4 s1 = floor(b1)*2.0 + 1.0;
+          vec4 sh = -step(h, vec4(0.0));
+          vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+          vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+          vec3 p0 = vec3(a0.xy, h.x);
+          vec3 p1 = vec3(a0.zw, h.y);
+          vec3 p2 = vec3(a1.xy, h.z);
+          vec3 p3 = vec3(a1.zw, h.w);
+          vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+          p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+          vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+          m = m * m;
+          return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+        }
+
         void main() {
-          vNormal = normalize(normalMatrix * normal);
-          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vec3 pos = position;
+          vec3 norm = normalize(normal);
+
+          // Noise displacement along normal (rippling peaks)
+          float t = uTime * 0.8;
+          float n1 = snoise(pos * 5.0 + vec3(t, 0.0, t * 0.3)) * 0.02;
+          float n2 = snoise(pos * 10.0 + vec3(0.0, t * 1.2, t * 0.5)) * 0.012;
+          float disp = (n1 + n2) * (1.0 + uAudioPulse * 1.5);
+          pos += norm * disp;
+
+          vDisplacement = disp;
+          vNormal = normalize(normalMatrix * norm);
+          vec4 mv = modelViewMatrix * vec4(pos, 1.0);
           vViewDir = normalize(-mv.xyz);
           gl_Position = projectionMatrix * mv;
         }
@@ -287,19 +379,32 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
         uniform float uAudioPulse;
         varying vec3 vNormal;
         varying vec3 vViewDir;
+        varying float vDisplacement;
         void main() {
-          float fresnel = pow(1.0 - abs(dot(vViewDir, vNormal)), 2.0);
+          float facing = abs(dot(vViewDir, vNormal));
+          float edge = 1.0 - facing;
+
+          // Soft faded edges
+          float edgeFade = smoothstep(0.95, 0.4, edge);
+
+          float fresnel = pow(edge, 2.0);
           float b = 0.9 + fresnel * 0.1 + uAudioPulse * 0.1;
-          gl_FragColor = vec4(vec3(b), 1.0);
+
+          // Brighten peaks slightly
+          b += vDisplacement * 3.0;
+
+          float alpha = edgeFade;
+          gl_FragColor = vec4(vec3(b), alpha);
         }
       `,
+      transparent: true,
       depthWrite: true,
     })
     const core = new THREE.Mesh(coreGeo, coreMat)
     core.userData.isCore = true
     group.add(core)
 
-    // === INNER GLOW: slightly larger transparent sphere ===
+    // === INNER GLOW: slightly larger transparent sphere with soft edges ===
     const glowGeo = new THREE.SphereGeometry(0.16, 20, 20)
     const glowMat = new THREE.ShaderMaterial({
       uniforms: {
@@ -320,9 +425,15 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
         varying vec3 vNormal;
         varying vec3 vViewDir;
         void main() {
-          float rim = 1.0 - abs(dot(vViewDir, vNormal));
+          float facing = abs(dot(vViewDir, vNormal));
+          float rim = 1.0 - facing;
+
+          // Fade out towards the edges so no hard silhouette
+          float edgeFade = smoothstep(1.0, 0.25, rim);
+
           float glow = pow(rim, 1.5) * (0.5 + uAudioPulse * 0.2);
-          gl_FragColor = vec4(vec3(glow), glow);
+          float alpha = glow * edgeFade;
+          gl_FragColor = vec4(vec3(glow), alpha);
         }
       `,
       transparent: true,
@@ -353,8 +464,8 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
         void main() {
           // vUv.y goes 0 (base) to 1 (tip) on a ConeGeometry
           float fade = 1.0 - vUv.y;
-          // Sharp brightness at base, rapid falloff
-          float brightness = pow(fade, 1.8) * (0.65 + uAudioPulse * 0.2);
+          // More gradual brightness falloff for enhanced dithering effect
+          float brightness = pow(fade, 1.2) * (0.7 + uAudioPulse * 0.2);
           gl_FragColor = vec4(vec3(brightness), 1.0);
         }
       `,
@@ -368,23 +479,29 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
       return s - Math.floor(s)
     }
 
-    // Primary spikes: 6 strong, long, slightly thicker
-    const primaryDirs = [
-      [0.0, 1.05, 2.2, 3.15, 4.25, 5.4],  // azimuth angles
-      [0.3, -0.2, 0.5, -0.4, 0.1, -0.6],   // elevation offsets
-    ]
-    for (let i = 0; i < 6; i++) {
-      const az = primaryDirs[0][i]
-      const el = primaryDirs[1][i]
-      const len = 0.35 + hash(i * 7.3) * 0.25
-      const thickness = 0.012 + hash(i * 3.1) * 0.006
+    // Create 3 rotating spike layers for dynamic effect
+    const spikeLayer1 = new THREE.Group()
+    const spikeLayer2 = new THREE.Group()
+    const spikeLayer3 = new THREE.Group()
+    spikeLayer1.userData.isSpikeLayer = true
+    spikeLayer1.userData.rotationSpeed = 0.08
+    spikeLayer2.userData.isSpikeLayer = true
+    spikeLayer2.userData.rotationSpeed = -0.05
+    spikeLayer3.userData.isSpikeLayer = true
+    spikeLayer3.userData.rotationSpeed = 0.12
+    group.add(spikeLayer1, spikeLayer2, spikeLayer3)
+
+    // Layer 1: 8 primary spikes - uniform length with minimal variation
+    for (let i = 0; i < 8; i++) {
+      const az = (i / 8) * Math.PI * 2 + hash(i * 7.3) * 0.3
+      const el = (hash(i * 11.1) - 0.5) * Math.PI * 0.6
+      const len = 0.18 + hash(i * 7.3) * 0.03  // Shorter
+      const thickness = 0.018 + hash(i * 3.1) * 0.004  // Wider
 
       const geo = new THREE.ConeGeometry(thickness, len, 4, 1, true)
-      // Shift origin to base of cone
       geo.translate(0, len / 2, 0)
       const spike = new THREE.Mesh(geo, spikeMat)
 
-      // Point the spike outward
       const dir = new THREE.Vector3(
         Math.cos(az) * Math.cos(el),
         Math.sin(el),
@@ -394,15 +511,22 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
       spike.position.copy(dir.multiplyScalar(0.08))
       spike.userData.isSpike = true
       spike.userData.baseLen = len
-      group.add(spike)
+      spikeLayer1.add(spike)
+
+      // Add curved base sphere
+      const baseGeo = new THREE.SphereGeometry(thickness * 1.3, 6, 6)
+      const baseSphere = new THREE.Mesh(baseGeo, spikeMat)
+      baseSphere.position.copy(spike.position)
+      baseSphere.userData.isSpike = true
+      spikeLayer1.add(baseSphere)
     }
 
-    // Secondary spikes: 14 thinner, shorter, more chaotic directions
-    for (let i = 0; i < 14; i++) {
-      const az = hash(i * 13.7) * Math.PI * 2
-      const el = (hash(i * 29.3) - 0.5) * Math.PI * 0.8
-      const len = 0.15 + hash(i * 19.1) * 0.2
-      const thickness = 0.006 + hash(i * 11.3) * 0.004
+    // Layer 2: 12 secondary spikes - uniform length
+    for (let i = 0; i < 12; i++) {
+      const az = (i / 12) * Math.PI * 2 + hash(i * 13.7) * 0.4
+      const el = (hash(i * 29.3) - 0.5) * Math.PI * 0.7
+      const len = 0.14 + hash(i * 19.1) * 0.03  // Shorter
+      const thickness = 0.014 + hash(i * 11.3) * 0.003  // Wider
 
       const geo = new THREE.ConeGeometry(thickness, len, 3, 1, true)
       geo.translate(0, len / 2, 0)
@@ -417,36 +541,202 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
       spike.position.copy(dir.multiplyScalar(0.07))
       spike.userData.isSpike = true
       spike.userData.baseLen = len
-      group.add(spike)
+      spikeLayer2.add(spike)
+
+      // Add curved base sphere
+      const baseGeo = new THREE.SphereGeometry(thickness * 1.3, 5, 5)
+      const baseSphere = new THREE.Mesh(baseGeo, spikeMat)
+      baseSphere.position.copy(spike.position)
+      baseSphere.userData.isSpike = true
+      spikeLayer2.add(baseSphere)
     }
 
-    // Tertiary spikes: 10 very thin, faint, forked pairs
-    for (let i = 0; i < 10; i++) {
-      const baseAz = hash(i * 31.3) * Math.PI * 2
-      const baseEl = (hash(i * 47.9) - 0.5) * Math.PI * 0.7
-      for (let fork = 0; fork < 2; fork++) {
-        const forkOff = (fork - 0.5) * 0.15
-        const az = baseAz + forkOff
-        const el = baseEl + forkOff * 0.5
-        const len = 0.1 + hash(i * 53.1 + fork * 11.0) * 0.12
-        const thickness = 0.003 + hash(i * 67.7 + fork) * 0.003
+    // Layer 3: 16 tertiary spikes - uniform length, thinnest
+    for (let i = 0; i < 16; i++) {
+      const az = (i / 16) * Math.PI * 2 + hash(i * 31.3) * 0.5
+      const el = (hash(i * 47.9) - 0.5) * Math.PI * 0.75
+      const len = 0.11 + hash(i * 53.1) * 0.02  // Shorter
+      const thickness = 0.010 + hash(i * 67.7) * 0.003  // Wider
 
-        const geo = new THREE.ConeGeometry(thickness, len, 3, 1, true)
-        geo.translate(0, len / 2, 0)
-        const spike = new THREE.Mesh(geo, spikeMat)
+      const geo = new THREE.ConeGeometry(thickness, len, 3, 1, true)
+      geo.translate(0, len / 2, 0)
+      const spike = new THREE.Mesh(geo, spikeMat)
 
-        const dir = new THREE.Vector3(
-          Math.cos(az) * Math.cos(el),
-          Math.sin(el),
-          Math.sin(az) * Math.cos(el)
-        ).normalize()
-        spike.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir)
-        spike.position.copy(dir.multiplyScalar(0.06))
-        spike.userData.isSpike = true
-        spike.userData.baseLen = len
-        group.add(spike)
-      }
+      const dir = new THREE.Vector3(
+        Math.cos(az) * Math.cos(el),
+        Math.sin(el),
+        Math.sin(az) * Math.cos(el)
+      ).normalize()
+      spike.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir)
+      spike.position.copy(dir.multiplyScalar(0.06))
+      spike.userData.isSpike = true
+      spike.userData.baseLen = len
+      spikeLayer3.add(spike)
+
+      // Add curved base sphere
+      const baseGeo = new THREE.SphereGeometry(thickness * 1.3, 5, 5)
+      const baseSphere = new THREE.Mesh(baseGeo, spikeMat)
+      baseSphere.position.copy(spike.position)
+      baseSphere.userData.isSpike = true
+      spikeLayer3.add(baseSphere)
     }
+
+    // === DYNAMIC DOT MESH SURFACE: Fishing net sphere with noise distortion ===
+    const dotCount = 2400  // More dots for tighter mesh
+    const dotPositions = new Float32Array(dotCount * 3)
+    const dotOriginalPositions = new Float32Array(dotCount * 3)
+
+    // Create dots in a tight spherical grid (fishing net pattern)
+    const netRadius = 0.18  // Tightly wraps the nucleus core
+
+    for (let i = 0; i < dotCount; i++) {
+      const i3 = i * 3
+
+      // Fibonacci sphere distribution for even point spacing (net-like)
+      const phi = Math.acos(1 - 2 * (i + 0.5) / dotCount)
+      const theta = Math.PI * (1 + Math.sqrt(5)) * i
+
+      dotPositions[i3] = Math.sin(phi) * Math.cos(theta) * netRadius
+      dotPositions[i3 + 1] = Math.sin(phi) * Math.sin(theta) * netRadius
+      dotPositions[i3 + 2] = Math.cos(phi) * netRadius
+
+      // Store original positions for noise calculation
+      dotOriginalPositions[i3] = dotPositions[i3]
+      dotOriginalPositions[i3 + 1] = dotPositions[i3 + 1]
+      dotOriginalPositions[i3 + 2] = dotPositions[i3 + 2]
+    }
+
+    const dotGeometry = new THREE.BufferGeometry()
+    dotGeometry.setAttribute('position', new THREE.BufferAttribute(dotPositions, 3))
+    dotGeometry.setAttribute('originalPosition', new THREE.BufferAttribute(dotOriginalPositions, 3))
+
+    const dotMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0.0 },
+        uAudioPulse: { value: 0.0 },
+      },
+      vertexShader: `
+        uniform float uTime;
+        uniform float uAudioPulse;
+        attribute vec3 originalPosition;
+        varying float vBrightness;
+
+        // 3D Simplex-like noise function
+        vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+        vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+        float snoise(vec3 v) {
+          const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+          const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+
+          vec3 i  = floor(v + dot(v, C.yyy));
+          vec3 x0 = v - i + dot(i, C.xxx);
+
+          vec3 g = step(x0.yzx, x0.xyz);
+          vec3 l = 1.0 - g;
+          vec3 i1 = min(g.xyz, l.zxy);
+          vec3 i2 = max(g.xyz, l.zxy);
+
+          vec3 x1 = x0 - i1 + C.xxx;
+          vec3 x2 = x0 - i2 + C.yyy;
+          vec3 x3 = x0 - D.yyy;
+
+          i = mod289(i);
+          vec4 p = permute(permute(permute(
+                    i.z + vec4(0.0, i1.z, i2.z, 1.0))
+                  + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+                  + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+
+          float n_ = 0.142857142857;
+          vec3 ns = n_ * D.wyz - D.xzx;
+
+          vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+
+          vec4 x_ = floor(j * ns.z);
+          vec4 y_ = floor(j - 7.0 * x_);
+
+          vec4 x = x_ *ns.x + ns.yyyy;
+          vec4 y = y_ *ns.x + ns.yyyy;
+          vec4 h = 1.0 - abs(x) - abs(y);
+
+          vec4 b0 = vec4(x.xy, y.xy);
+          vec4 b1 = vec4(x.zw, y.zw);
+
+          vec4 s0 = floor(b0)*2.0 + 1.0;
+          vec4 s1 = floor(b1)*2.0 + 1.0;
+          vec4 sh = -step(h, vec4(0.0));
+
+          vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+          vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+
+          vec3 p0 = vec3(a0.xy, h.x);
+          vec3 p1 = vec3(a0.zw, h.y);
+          vec3 p2 = vec3(a1.xy, h.z);
+          vec3 p3 = vec3(a1.zw, h.w);
+
+          vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+          p0 *= norm.x;
+          p1 *= norm.y;
+          p2 *= norm.z;
+          p3 *= norm.w;
+
+          vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+          m = m * m;
+          return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+        }
+
+        void main() {
+          vec3 pos = originalPosition;
+
+          // Multi-octave noise for rippling distortion (slow, organic)
+          float noiseScale = 5.0;
+          float timeScale = uTime * 0.35;
+
+          float noise1 = snoise(pos * noiseScale + vec3(timeScale, 0.0, timeScale * 0.3)) * 0.04;
+          float noise2 = snoise(pos * noiseScale * 2.0 + vec3(0.0, timeScale * 1.3, timeScale * 0.5)) * 0.025;
+          float noise3 = snoise(pos * noiseScale * 3.5 + vec3(timeScale * 0.6, timeScale * 0.3, 0.0)) * 0.015;
+
+          float noiseAmount = noise1 + noise2 + noise3;
+          float pulseMultiplier = 1.0 + uAudioPulse * 1.5;
+
+          // Distort along the normal direction (expand/contract) - stronger ripple
+          vec3 normal = normalize(pos);
+          pos += normal * noiseAmount * pulseMultiplier;
+
+          // Vary brightness based on noise displacement
+          vBrightness = 0.5 + noiseAmount * pulseMultiplier * 8.0;
+
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+          gl_Position = projectionMatrix * mvPosition;
+          gl_PointSize = 1.8 * (1.0 + uAudioPulse * 0.4);
+        }
+      `,
+      fragmentShader: `
+        varying float vBrightness;
+
+        void main() {
+          // Circular point shape
+          vec2 center = gl_PointCoord - 0.5;
+          float dist = length(center);
+          if (dist > 0.5) discard;
+
+          // Soft edges for net-like appearance
+          float alpha = 1.0 - smoothstep(0.2, 0.5, dist);
+          float brightness = clamp(vBrightness, 0.35, 0.85);
+
+          gl_FragColor = vec4(vec3(brightness), alpha * 0.6);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    })
+
+    const dotMesh = new THREE.Points(dotGeometry, dotMaterial)
+    dotMesh.userData.isDotMesh = true
+    group.add(dotMesh)
 
     return group
   }, [])
@@ -783,6 +1073,21 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
         return
       }
 
+      // Check nucleus center (core + glow + spikes)
+      if (nucleusRef.current) {
+        const nucleusMeshes: THREE.Object3D[] = []
+        nucleusRef.current.traverse(child => {
+          if (child instanceof THREE.Mesh) {
+            nucleusMeshes.push(child)
+          }
+        })
+        const nucleusIntersects = raycaster.intersectObjects(nucleusMeshes)
+        if (nucleusIntersects.length > 0) {
+          onNucleusClickRef.current?.()
+          return
+        }
+      }
+
       // Check orbit rings (they're inside groups)
       const orbitRingMeshes = orbitGroups.map(g => g.children[0]).filter(Boolean)
       const orbitIntersects = raycaster.intersectObjects(orbitRingMeshes)
@@ -847,10 +1152,6 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
 
       // Animate nucleus: 3D diffraction spike core + spikes
       if (nucleusRef.current) {
-        // Slow rotation
-        nucleusRef.current.rotation.y = elapsedTime * 0.12
-        nucleusRef.current.rotation.x = Math.sin(elapsedTime * 0.06) * 0.12
-
         // Compute audio pulse from tempo and energy
         let targetPulse = 0
         if (isAudioPlayingRef.current) {
@@ -862,6 +1163,42 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
         }
 
         nucleusRef.current.children.forEach(child => {
+          // Rotate spike layers independently for dynamic effect
+          if (child instanceof THREE.Group && child.userData.isSpikeLayer) {
+            const speed = child.userData.rotationSpeed || 0.1
+            child.rotation.y = elapsedTime * speed
+            child.rotation.x = Math.sin(elapsedTime * speed * 0.5) * 0.15
+            child.rotation.z = Math.cos(elapsedTime * speed * 0.3) * 0.1
+
+            // Update materials in spike layer
+            child.children.forEach(spike => {
+              if (!(spike instanceof THREE.Mesh)) return
+              const mat = spike.material as THREE.ShaderMaterial
+
+              if (mat.uniforms.uAudioPulse) {
+                mat.uniforms.uAudioPulse.value += (targetPulse - mat.uniforms.uAudioPulse.value) * 0.2
+              }
+
+              // Scale spike lengths with pulse
+              if (spike.userData.isSpike && spike.userData.baseLen) {
+                const pulse = mat.uniforms.uAudioPulse?.value || 0
+                const s = 1.0 + pulse * 0.6
+                spike.scale.set(1, s, 1)
+              }
+            })
+          }
+
+          // Animate dot mesh surface (THREE.Points, not Mesh)
+          if (child instanceof THREE.Points && child.userData.isDotMesh) {
+            const dotMat = child.material as THREE.ShaderMaterial
+            if (dotMat.uniforms.uTime) {
+              dotMat.uniforms.uTime.value = elapsedTime
+            }
+            if (dotMat.uniforms.uAudioPulse) {
+              dotMat.uniforms.uAudioPulse.value += (targetPulse - dotMat.uniforms.uAudioPulse.value) * 0.2
+            }
+          }
+
           if (!(child instanceof THREE.Mesh)) return
           const mat = child.material as THREE.ShaderMaterial
 
@@ -877,13 +1214,6 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
           if (child.userData.isCore) {
             const s = 1.0 + mat.uniforms.uAudioPulse.value * 0.2
             child.scale.setScalar(s)
-          }
-
-          // Scale spike lengths with pulse
-          if (child.userData.isSpike && child.userData.baseLen) {
-            const pulse = mat.uniforms.uAudioPulse?.value || 0
-            const s = 1.0 + pulse * 0.6
-            child.scale.set(1, s, 1)
           }
         })
       }
