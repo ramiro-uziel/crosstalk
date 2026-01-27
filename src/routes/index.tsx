@@ -1,10 +1,27 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useState, useEffect, useMemo } from 'react'
-import { Music, Sparkles, Plus, Trash2, MessageCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { Music, Sparkles, Plus, Trash2, MessageCircle, ChevronDown, ChevronUp, Pause, Play, Volume2, X } from 'lucide-react'
 import { NucleusVisualization } from '../components/NucleusVisualization'
 import { NucleusChat } from '../components/NucleusChat'
 import type { Track } from '../types/track'
 import '../styles/galaxy.css'
+
+// YouTube IFrame API types
+declare global {
+  interface Window {
+    YT: {
+      Player: new (elementId: string, config: {
+        height: string
+        width: string
+        videoId: string
+        playerVars?: Record<string, number | string>
+        events?: Record<string, (event: { data: number; target: { playVideo: () => void; pauseVideo: () => void; destroy: () => void } }) => void>
+      }) => { playVideo: () => void; pauseVideo: () => void; destroy: () => void; getPlayerState: () => number }
+      PlayerState: { PLAYING: number; PAUSED: number; ENDED: number; BUFFERING: number }
+    }
+    onYouTubeIframeAPIReady: () => void
+  }
+}
 
 interface OrbitInfo {
   orbitIndex: number
@@ -22,6 +39,177 @@ function App() {
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null)
   const [selectedOrbit, setSelectedOrbit] = useState<number | null>(null)
+
+  // YouTube audio playback state
+  const [playingTrack, setPlayingTrack] = useState<Track | null>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [isLoadingVideo, setIsLoadingVideo] = useState(false)
+  const [showTrackChangeConfirm, setShowTrackChangeConfirm] = useState(false)
+  const [pendingTrack, setPendingTrack] = useState<Track | null>(null)
+  const ytPlayerRef = useRef<{ playVideo: () => void; pauseVideo: () => void; destroy: () => void; getPlayerState: () => number } | null>(null)
+  const ytApiReady = useRef(false)
+  const ytApiCallbacks = useRef<(() => void)[]>([])
+
+  // Load YouTube IFrame API
+  useEffect(() => {
+    if (document.getElementById('yt-iframe-api')) {
+      if (window.YT && window.YT.Player) {
+        ytApiReady.current = true
+      }
+      return
+    }
+
+    const tag = document.createElement('script')
+    tag.id = 'yt-iframe-api'
+    tag.src = 'https://www.youtube.com/iframe_api'
+    document.head.appendChild(tag)
+
+    window.onYouTubeIframeAPIReady = () => {
+      ytApiReady.current = true
+      ytApiCallbacks.current.forEach(cb => cb())
+      ytApiCallbacks.current = []
+    }
+  }, [])
+
+  const searchYouTubeVideo = useCallback(async (track: Track): Promise<string | null> => {
+    const query = `${track.title} ${track.artist || ''} official audio`
+    const response = await fetch(`/api/youtube/search?q=${encodeURIComponent(query)}`)
+    const data = await response.json()
+    return data.videoId || null
+  }, [])
+
+  const createYTPlayer = useCallback((videoId: string, track: Track) => {
+    // Destroy existing player
+    if (ytPlayerRef.current) {
+      ytPlayerRef.current.destroy()
+      ytPlayerRef.current = null
+    }
+
+    // Ensure container exists
+    let container = document.getElementById('yt-player-container')
+    if (!container) {
+      container = document.createElement('div')
+      container.id = 'yt-player-container'
+      container.style.position = 'fixed'
+      container.style.top = '-9999px'
+      container.style.left = '-9999px'
+      container.style.width = '1px'
+      container.style.height = '1px'
+      container.style.overflow = 'hidden'
+      document.body.appendChild(container)
+    }
+
+    // Clear and recreate the player div
+    container.innerHTML = '<div id="yt-player"></div>'
+
+    const player = new window.YT.Player('yt-player', {
+      height: '1',
+      width: '1',
+      videoId,
+      playerVars: {
+        autoplay: 1,
+        controls: 0,
+        disablekb: 1,
+        fs: 0,
+        modestbranding: 1,
+        rel: 0,
+      },
+      events: {
+        onReady: (event) => {
+          event.target.playVideo()
+        },
+        onStateChange: (event) => {
+          if (event.data === window.YT.PlayerState.PLAYING) {
+            setIsPlaying(true)
+            setIsLoadingVideo(false)
+          } else if (event.data === window.YT.PlayerState.PAUSED) {
+            setIsPlaying(false)
+          } else if (event.data === window.YT.PlayerState.ENDED) {
+            // Loop: replay
+            event.target.playVideo()
+          }
+        },
+      },
+    })
+
+    ytPlayerRef.current = player
+    setPlayingTrack(track)
+  }, [])
+
+  const playTrack = useCallback(async (track: Track) => {
+    setIsLoadingVideo(true)
+
+    const videoId = await searchYouTubeVideo(track)
+    if (!videoId) {
+      setIsLoadingVideo(false)
+      setError('Could not find this track on YouTube')
+      return
+    }
+
+    const doCreate = () => createYTPlayer(videoId, track)
+
+    if (ytApiReady.current) {
+      doCreate()
+    } else {
+      ytApiCallbacks.current.push(doCreate)
+    }
+  }, [searchYouTubeVideo, createYTPlayer])
+
+  const togglePlayback = useCallback(() => {
+    if (!ytPlayerRef.current) return
+    if (isPlaying) {
+      ytPlayerRef.current.pauseVideo()
+      setIsPlaying(false)
+    } else {
+      ytPlayerRef.current.playVideo()
+      setIsPlaying(true)
+    }
+  }, [isPlaying])
+
+  const stopPlayback = useCallback(() => {
+    if (ytPlayerRef.current) {
+      ytPlayerRef.current.destroy()
+      ytPlayerRef.current = null
+    }
+    setPlayingTrack(null)
+    setIsPlaying(false)
+  }, [])
+
+  const handleTrackClickForAudio = useCallback((track: Track) => {
+    if (!playingTrack) {
+      // Nothing playing - start playing
+      playTrack(track)
+    } else if (playingTrack.id === track.id) {
+      // Same track - toggle play/pause
+      togglePlayback()
+    } else {
+      // Different track playing - ask to confirm change
+      setPendingTrack(track)
+      setShowTrackChangeConfirm(true)
+    }
+  }, [playingTrack, playTrack, togglePlayback])
+
+  const confirmTrackChange = useCallback(() => {
+    if (pendingTrack) {
+      playTrack(pendingTrack)
+    }
+    setShowTrackChangeConfirm(false)
+    setPendingTrack(null)
+  }, [pendingTrack, playTrack])
+
+  const cancelTrackChange = useCallback(() => {
+    setShowTrackChangeConfirm(false)
+    setPendingTrack(null)
+  }, [])
+
+  // Cleanup YouTube player on unmount
+  useEffect(() => {
+    return () => {
+      if (ytPlayerRef.current) {
+        ytPlayerRef.current.destroy()
+      }
+    }
+  }, [])
 
   // Track card expansion state
   const [expandedTracks, setExpandedTracks] = useState<Set<number>>(new Set())
@@ -137,6 +325,7 @@ function App() {
 
   const handleTrackClick = (track: Track) => {
     setSelectedTrack(track)
+    handleTrackClickForAudio(track)
   }
 
   // Sort tracks by added_at (newest first)
@@ -172,6 +361,9 @@ function App() {
           tracks={tracks}
           onOrbitClick={handleOrbitClick}
           onTrackClick={handleTrackClick}
+          isAudioPlaying={isPlaying}
+          audioEnergy={playingTrack?.energy ?? undefined}
+          audioTempo={playingTrack?.tempo ?? undefined}
         />
       </div>
 
@@ -335,6 +527,66 @@ function App() {
             >
               Close
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Audio player bar */}
+      {(playingTrack || isLoadingVideo) && (
+        <div className="fixed bottom-0 left-0 right-80 z-50 bg-black/95 backdrop-blur-sm border-t border-white/20 px-4 py-3 flex items-center gap-4 font-mono">
+          <button
+            onClick={togglePlayback}
+            disabled={isLoadingVideo}
+            className="w-8 h-8 flex items-center justify-center text-white hover:text-white/80 transition-colors border border-white/30 disabled:opacity-40"
+          >
+            {isLoadingVideo ? (
+              <span className="animate-pulse text-xs">...</span>
+            ) : isPlaying ? (
+              <Pause className="w-4 h-4" />
+            ) : (
+              <Play className="w-4 h-4" />
+            )}
+          </button>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-white truncate">
+              {isLoadingVideo ? 'Searching YouTube...' : playingTrack?.title}
+            </p>
+            <p className="text-xs text-white/50 truncate">
+              {isLoadingVideo ? '' : playingTrack?.artist}
+            </p>
+          </div>
+          {isPlaying && <Volume2 className="w-4 h-4 text-white/40" />}
+          <button
+            onClick={stopPlayback}
+            className="w-6 h-6 flex items-center justify-center text-white/40 hover:text-white transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Track change confirmation dialog */}
+      {showTrackChangeConfirm && pendingTrack && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="bg-black border border-white/30 p-6 max-w-sm mx-4 font-mono">
+            <p className="text-white text-sm mb-1">Currently playing:</p>
+            <p className="text-white/60 text-xs mb-3">{playingTrack?.title} - {playingTrack?.artist}</p>
+            <p className="text-white text-sm mb-1">Switch to:</p>
+            <p className="text-white/60 text-xs mb-5">{pendingTrack.title} - {pendingTrack.artist}</p>
+            <div className="flex gap-2">
+              <button
+                onClick={confirmTrackChange}
+                className="flex-1 px-4 py-2 bg-white text-black text-sm hover:bg-gray-200 transition-colors"
+              >
+                Switch
+              </button>
+              <button
+                onClick={cancelTrackChange}
+                className="flex-1 px-4 py-2 bg-black text-white text-sm border border-white/30 hover:border-white transition-colors"
+              >
+                Keep current
+              </button>
+            </div>
           </div>
         </div>
       )}

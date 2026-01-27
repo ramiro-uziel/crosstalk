@@ -42,6 +42,9 @@ interface NucleusVisualizationProps {
   tracks: Track[]
   onOrbitClick?: (orbitInfo: OrbitInfo | null) => void
   onTrackClick?: (track: Track) => void
+  isAudioPlaying?: boolean
+  audioEnergy?: number
+  audioTempo?: number
 }
 
 // Orbit radii
@@ -126,7 +129,7 @@ const createDitheringShader = () => ({
   `,
 })
 
-export function NucleusVisualization({ tracks, onOrbitClick, onTrackClick }: NucleusVisualizationProps) {
+export function NucleusVisualization({ tracks, onOrbitClick, onTrackClick, isAudioPlaying, audioEnergy, audioTempo }: NucleusVisualizationProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
@@ -136,10 +139,21 @@ export function NucleusVisualization({ tracks, onOrbitClick, onTrackClick }: Nuc
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
   const trackPointsRef = useRef<Map<number, { group: THREE.Group; track: Track; orbitIndex: number; initialAngle: number; billboard: THREE.Mesh; glassMaterial: THREE.ShaderMaterial }>>(new Map())
   const orbitGroupsRef = useRef<THREE.Group[]>([])
-  const nucleusRef = useRef<THREE.Points | null>(null)
+  const nucleusRef = useRef<THREE.Group | null>(null)
   const animationIdRef = useRef<number | null>(null)
   const followedTrackIdRef = useRef<number | null>(null)
   const trackColorsRef = useRef<Map<number, { dominant: string; darker: string; lighter: string }>>(new Map())
+
+  // Keep audio state in refs for animation loop
+  const isAudioPlayingRef = useRef(false)
+  const audioEnergyRef = useRef(0.5)
+  const audioTempoRef = useRef(120)
+
+  useEffect(() => {
+    isAudioPlayingRef.current = isAudioPlaying || false
+    audioEnergyRef.current = audioEnergy ?? 0.5
+    audioTempoRef.current = audioTempo ?? 120
+  }, [isAudioPlaying, audioEnergy, audioTempo])
 
   // Brighten a color if it's too dark
   const ensureVisibleColor = useCallback((hexColor: string, minLuminance = 0.25): THREE.Color => {
@@ -221,35 +235,138 @@ export function NucleusVisualization({ tracks, onOrbitClick, onTrackClick }: Nuc
     tracksByOrbitRef.current = tracksByOrbit
   }, [tracksByOrbit])
 
-  // Create point cloud for nucleus
+  // Create sun-like nucleus: bright core + dither square particles in a sphere
   const createNucleus = useCallback(() => {
-    const particleCount = 2000
-    const positions = new Float32Array(particleCount * 3)
+    const group = new THREE.Group()
 
-    for (let i = 0; i < particleCount; i++) {
-      const i3 = i * 3
-      // Sphere distribution
-      const radius = Math.random() * 0.4
-      const theta = Math.random() * Math.PI * 2
-      const phi = Math.acos(2 * Math.random() - 1)
+    // === SUN CORE: bright glowing sphere ===
+    const coreGeometry = new THREE.SphereGeometry(0.15, 32, 32)
+    const coreMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0.0 },
+        uAudioPulse: { value: 0.0 },
+      },
+      vertexShader: `
+        varying vec3 vNormal;
+        varying vec3 vViewPosition;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+          vViewPosition = -mvPos.xyz;
+          gl_Position = projectionMatrix * mvPos;
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform float uAudioPulse;
+        varying vec3 vNormal;
+        varying vec3 vViewPosition;
+        void main() {
+          vec3 viewDir = normalize(vViewPosition);
+          float fresnel = pow(1.0 - abs(dot(viewDir, vNormal)), 2.0);
+          // Bright white core, slightly brighter at edges for glow
+          float brightness = 0.85 + fresnel * 0.15 + uAudioPulse * 0.1;
+          // Subtle breathing
+          brightness += sin(uTime * 1.5) * 0.03;
+          gl_FragColor = vec4(vec3(brightness), 1.0);
+        }
+      `,
+      transparent: false,
+      depthWrite: true,
+    })
+    const core = new THREE.Mesh(coreGeometry, coreMaterial)
+    core.userData.isCore = true
+    group.add(core)
 
-      positions[i3] = radius * Math.sin(phi) * Math.cos(theta)
-      positions[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta)
-      positions[i3 + 2] = radius * Math.cos(phi)
-    }
+    // === DITHER PARTICLES: square particles in spherical shells ===
+    // Multiple concentric shells of square particles, density falls off outward
+    const shells = [
+      { radius: 0.22, count: 300, size: 0.018, opacity: 0.9 },
+      { radius: 0.30, count: 400, size: 0.014, opacity: 0.7 },
+      { radius: 0.40, count: 350, size: 0.011, opacity: 0.5 },
+      { radius: 0.52, count: 250, size: 0.009, opacity: 0.3 },
+      { radius: 0.65, count: 150, size: 0.007, opacity: 0.15 },
+    ]
 
-    const geometry = new THREE.BufferGeometry()
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    shells.forEach((shell) => {
+      const positions = new Float32Array(shell.count * 3)
+      const opacities = new Float32Array(shell.count)
 
-    const material = new THREE.PointsMaterial({
-      color: 0xffffff,
-      size: 0.02,
-      sizeAttenuation: true,
-      transparent: true,
-      opacity: 0.8,
+      for (let i = 0; i < shell.count; i++) {
+        // Distribute on sphere surface with some radial jitter
+        const theta = Math.random() * Math.PI * 2
+        const phi = Math.acos(2 * Math.random() - 1)
+        const jitter = 1.0 + (Math.random() - 0.5) * 0.3
+        const r = shell.radius * jitter
+
+        const i3 = i * 3
+        positions[i3] = r * Math.sin(phi) * Math.cos(theta)
+        positions[i3 + 1] = r * Math.sin(phi) * Math.sin(theta)
+        positions[i3 + 2] = r * Math.cos(phi)
+
+        // Vary opacity per particle for dither-like pattern
+        opacities[i] = shell.opacity * (0.5 + Math.random() * 0.5)
+      }
+
+      const geometry = new THREE.BufferGeometry()
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+      geometry.setAttribute('aOpacity', new THREE.BufferAttribute(opacities, 1))
+
+      // Custom shader for square particles
+      const material = new THREE.ShaderMaterial({
+        uniforms: {
+          uTime: { value: 0.0 },
+          uAudioPulse: { value: 0.0 },
+          uBaseSize: { value: shell.size },
+          uShellRadius: { value: shell.radius },
+        },
+        vertexShader: `
+          attribute float aOpacity;
+          uniform float uTime;
+          uniform float uAudioPulse;
+          uniform float uBaseSize;
+          uniform float uShellRadius;
+
+          varying float vOpacity;
+
+          void main() {
+            vOpacity = aOpacity;
+
+            // Audio pulse expands particle positions outward
+            vec3 dir = normalize(position);
+            float audioExpand = 1.0 + uAudioPulse * 0.4;
+            // Subtle radial breathing
+            float breathe = 1.0 + sin(uTime * 1.2 + uShellRadius * 10.0) * 0.03;
+            vec3 pos = position * audioExpand * breathe;
+
+            vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+
+            // Square particle size, slightly bigger when pulsing
+            float sizePulse = 1.0 + uAudioPulse * 0.3;
+            gl_PointSize = uBaseSize * sizePulse * (300.0 / -mvPosition.z);
+
+            gl_Position = projectionMatrix * mvPosition;
+          }
+        `,
+        fragmentShader: `
+          varying float vOpacity;
+
+          void main() {
+            // Square particles: no rounding, just fill the point
+            gl_FragColor = vec4(vec3(1.0), vOpacity);
+          }
+        `,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      })
+
+      const points = new THREE.Points(geometry, material)
+      points.userData.isParticleShell = true
+      group.add(points)
     })
 
-    return new THREE.Points(geometry, material)
+    return group
   }, [])
 
   // Create orbital ring as points inside a tilted group
@@ -646,10 +763,36 @@ export function NucleusVisualization({ tracks, onOrbitClick, onTrackClick }: Nuc
     const animate = () => {
       const elapsedTime = clock.getElapsedTime()
 
-      // Rotate nucleus slowly
+      // Animate nucleus: sun core + dither particle shells
       if (nucleusRef.current) {
         nucleusRef.current.rotation.y = elapsedTime * 0.1
         nucleusRef.current.rotation.x = Math.sin(elapsedTime * 0.05) * 0.1
+
+        // Compute audio pulse from tempo and energy
+        let targetPulse = 0
+        if (isAudioPlayingRef.current) {
+          const bps = audioTempoRef.current / 60.0
+          const energy = audioEnergyRef.current
+          const beat = Math.sin(elapsedTime * bps * Math.PI * 2)
+          const halfBeat = Math.sin(elapsedTime * bps * Math.PI * 4) * 0.3
+          targetPulse = (Math.pow(Math.max(beat, 0.0), 2.0) + Math.pow(Math.max(halfBeat, 0.0), 2.0) * 0.3) * energy
+        }
+
+        // Update all children uniforms
+        nucleusRef.current.children.forEach(child => {
+          if (child instanceof THREE.Mesh && child.userData.isCore) {
+            const mat = child.material as THREE.ShaderMaterial
+            mat.uniforms.uTime.value = elapsedTime
+            mat.uniforms.uAudioPulse.value += (targetPulse - mat.uniforms.uAudioPulse.value) * 0.2
+            // Core scale pulse
+            const scale = 1.0 + mat.uniforms.uAudioPulse.value * 0.15
+            child.scale.setScalar(scale)
+          } else if (child instanceof THREE.Points && child.userData.isParticleShell) {
+            const mat = child.material as THREE.ShaderMaterial
+            mat.uniforms.uTime.value = elapsedTime
+            mat.uniforms.uAudioPulse.value += (targetPulse - mat.uniforms.uAudioPulse.value) * 0.2
+          }
+        })
       }
 
       // Animate track points moving along their orbits
@@ -717,10 +860,17 @@ export function NucleusVisualization({ tracks, onOrbitClick, onTrackClick }: Nuc
         cancelAnimationFrame(animationIdRef.current)
       }
 
-      // Dispose nucleus
+      // Dispose nucleus group (core mesh + particle shells)
       if (nucleusRef.current) {
-        nucleusRef.current.geometry.dispose()
-        ;(nucleusRef.current.material as THREE.Material).dispose()
+        nucleusRef.current.children.forEach(child => {
+          if (child instanceof THREE.Mesh) {
+            child.geometry.dispose()
+            ;(child.material as THREE.Material).dispose()
+          } else if (child instanceof THREE.Points) {
+            child.geometry.dispose()
+            ;(child.material as THREE.Material).dispose()
+          }
+        })
         scene.remove(nucleusRef.current)
         nucleusRef.current = null
       }

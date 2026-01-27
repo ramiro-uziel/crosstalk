@@ -93,7 +93,8 @@ export const Route = createFileRoute('/api/tracks/analyze')({
             analysis.dominant_instruments || null,
             analysis.vocal_characteristics,
             metadata.duration_ms,
-            thumbnailUrl
+            thumbnailUrl,
+            metadata.preview_url || null
           )
 
           const track = trackQueries.getById.get(result.lastInsertRowid) as Track
