@@ -2,12 +2,23 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Music, Sparkles, Plus, Trash2, MessageCircle, ChevronDown, ChevronUp, Pause, Play, Volume2, X } from 'lucide-react'
 import { NucleusVisualization } from '../components/NucleusVisualization'
+import type { NucleusVisualizationHandle } from '../components/NucleusVisualization'
 import { NucleusChat } from '../components/NucleusChat'
 import type { Track } from '../types/track'
 import { searchYouTube } from '../lib/youtube'
 import '../styles/galaxy.css'
 
 // YouTube IFrame API types
+interface YTPlayer {
+  playVideo: () => void
+  pauseVideo: () => void
+  destroy: () => void
+  getPlayerState: () => number
+  getCurrentTime: () => number
+  getDuration: () => number
+  seekTo: (seconds: number, allowSeekAhead: boolean) => void
+}
+
 declare global {
   interface Window {
     YT: {
@@ -16,8 +27,8 @@ declare global {
         width: string
         videoId: string
         playerVars?: Record<string, number | string>
-        events?: Record<string, (event: { data: number; target: { playVideo: () => void; pauseVideo: () => void; destroy: () => void } }) => void>
-      }) => { playVideo: () => void; pauseVideo: () => void; destroy: () => void; getPlayerState: () => number }
+        events?: Record<string, (event: { data: number; target: YTPlayer }) => void>
+      }) => YTPlayer
       PlayerState: { PLAYING: number; PAUSED: number; ENDED: number; BUFFERING: number }
     }
     onYouTubeIframeAPIReady: () => void
@@ -27,6 +38,12 @@ declare global {
 interface OrbitInfo {
   orbitIndex: number
   tracks: Track[]
+}
+
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
 }
 
 export const Route = createFileRoute('/')({ component: App })
@@ -41,13 +58,18 @@ function App() {
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null)
   const [selectedOrbit, setSelectedOrbit] = useState<number | null>(null)
 
+  const visualizationRef = useRef<NucleusVisualizationHandle>(null)
+
   // YouTube audio playback state
   const [playingTrack, setPlayingTrack] = useState<Track | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isLoadingVideo, setIsLoadingVideo] = useState(false)
   const [showTrackChangeConfirm, setShowTrackChangeConfirm] = useState(false)
   const [pendingTrack, setPendingTrack] = useState<Track | null>(null)
-  const ytPlayerRef = useRef<{ playVideo: () => void; pauseVideo: () => void; destroy: () => void; getPlayerState: () => number } | null>(null)
+  const [seekProgress, setSeekProgress] = useState(0)
+  const [seekDuration, setSeekDuration] = useState(0)
+  const seekIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const ytPlayerRef = useRef<YTPlayer | null>(null)
   const ytApiReady = useRef(false)
   const ytApiCallbacks = useRef<(() => void)[]>([])
 
@@ -127,8 +149,17 @@ function App() {
           if (event.data === window.YT.PlayerState.PLAYING) {
             setIsPlaying(true)
             setIsLoadingVideo(false)
+            // Start polling progress
+            if (seekIntervalRef.current) clearInterval(seekIntervalRef.current)
+            seekIntervalRef.current = setInterval(() => {
+              if (ytPlayerRef.current) {
+                setSeekProgress(ytPlayerRef.current.getCurrentTime())
+                setSeekDuration(ytPlayerRef.current.getDuration())
+              }
+            }, 500)
           } else if (event.data === window.YT.PlayerState.PAUSED) {
             setIsPlaying(false)
+            if (seekIntervalRef.current) clearInterval(seekIntervalRef.current)
           } else if (event.data === window.YT.PlayerState.ENDED) {
             // Loop: replay
             event.target.playVideo()
@@ -172,12 +203,15 @@ function App() {
   }, [isPlaying])
 
   const stopPlayback = useCallback(() => {
+    if (seekIntervalRef.current) clearInterval(seekIntervalRef.current)
     if (ytPlayerRef.current) {
       ytPlayerRef.current.destroy()
       ytPlayerRef.current = null
     }
     setPlayingTrack(null)
     setIsPlaying(false)
+    setSeekProgress(0)
+    setSeekDuration(0)
   }, [])
 
   const handleTrackClickForAudio = useCallback((track: Track) => {
@@ -207,9 +241,18 @@ function App() {
     setPendingTrack(null)
   }, [])
 
+  const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const time = parseFloat(e.target.value)
+    setSeekProgress(time)
+    if (ytPlayerRef.current) {
+      ytPlayerRef.current.seekTo(time, true)
+    }
+  }, [])
+
   // Cleanup YouTube player on unmount
   useEffect(() => {
     return () => {
+      if (seekIntervalRef.current) clearInterval(seekIntervalRef.current)
       if (ytPlayerRef.current) {
         ytPlayerRef.current.destroy()
       }
@@ -363,6 +406,7 @@ function App() {
       {/* Visualization takes full screen minus sidebar width */}
       <div className="fixed inset-0 right-80">
         <NucleusVisualization
+          ref={visualizationRef}
           tracks={tracks}
           onOrbitClick={handleOrbitClick}
           onTrackClick={handleTrackClick}
@@ -527,7 +571,10 @@ function App() {
               <p className="tooltip-mood">{selectedTrack.mood_description}</p>
             )}
             <button
-              onClick={() => setSelectedTrack(null)}
+              onClick={() => {
+                setSelectedTrack(null)
+                visualizationRef.current?.resetCamera()
+              }}
               className="tooltip-close"
             >
               Close
@@ -538,35 +585,61 @@ function App() {
 
       {/* Audio player bar */}
       {(playingTrack || isLoadingVideo) && (
-        <div className="fixed bottom-0 left-0 right-80 z-50 bg-black/95 backdrop-blur-sm border-t border-white/20 px-4 py-3 flex items-center gap-4 font-mono">
-          <button
-            onClick={togglePlayback}
-            disabled={isLoadingVideo}
-            className="w-8 h-8 flex items-center justify-center text-white hover:text-white/80 transition-colors border border-white/30 disabled:opacity-40"
-          >
-            {isLoadingVideo ? (
-              <span className="animate-pulse text-xs">...</span>
-            ) : isPlaying ? (
-              <Pause className="w-4 h-4" />
-            ) : (
-              <Play className="w-4 h-4" />
-            )}
-          </button>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm text-white truncate">
-              {isLoadingVideo ? 'Searching YouTube...' : playingTrack?.title}
-            </p>
-            <p className="text-xs text-white/50 truncate">
-              {isLoadingVideo ? '' : playingTrack?.artist}
-            </p>
+        <div className="fixed bottom-0 left-0 right-80 z-50 bg-black/95 backdrop-blur-sm border-t border-white/20 font-mono">
+          {/* Seek bar */}
+          {seekDuration > 0 && (
+            <div className="px-4 pt-2 flex items-center gap-2">
+              <span className="text-[10px] text-white/40 w-10 text-right tabular-nums">
+                {formatTime(seekProgress)}
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={seekDuration}
+                step={0.5}
+                value={seekProgress}
+                onChange={handleSeek}
+                className="flex-1 h-1 appearance-none bg-white/20 cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:h-2 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-none [&::-moz-range-thumb]:w-2 [&::-moz-range-thumb]:h-2 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:rounded-none"
+                style={{
+                  background: `linear-gradient(to right, rgba(255,255,255,0.7) ${(seekProgress / seekDuration) * 100}%, rgba(255,255,255,0.2) ${(seekProgress / seekDuration) * 100}%)`,
+                }}
+              />
+              <span className="text-[10px] text-white/40 w-10 tabular-nums">
+                {formatTime(seekDuration)}
+              </span>
+            </div>
+          )}
+          {/* Controls row */}
+          <div className="px-4 py-2 flex items-center gap-4">
+            <button
+              onClick={togglePlayback}
+              disabled={isLoadingVideo}
+              className="w-8 h-8 flex items-center justify-center text-white hover:text-white/80 transition-colors border border-white/30 disabled:opacity-40"
+            >
+              {isLoadingVideo ? (
+                <span className="animate-pulse text-xs">...</span>
+              ) : isPlaying ? (
+                <Pause className="w-4 h-4" />
+              ) : (
+                <Play className="w-4 h-4" />
+              )}
+            </button>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-white truncate">
+                {isLoadingVideo ? 'Searching YouTube...' : playingTrack?.title}
+              </p>
+              <p className="text-xs text-white/50 truncate">
+                {isLoadingVideo ? '' : playingTrack?.artist}
+              </p>
+            </div>
+            {isPlaying && <Volume2 className="w-4 h-4 text-white/40" />}
+            <button
+              onClick={stopPlayback}
+              className="w-6 h-6 flex items-center justify-center text-white/40 hover:text-white transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
-          {isPlaying && <Volume2 className="w-4 h-4 text-white/40" />}
-          <button
-            onClick={stopPlayback}
-            className="w-6 h-6 flex items-center justify-center text-white/40 hover:text-white transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
         </div>
       )}
 

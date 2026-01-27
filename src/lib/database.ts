@@ -1,7 +1,10 @@
 import Database from 'better-sqlite3'
 import path from 'path'
+import { fileURLToPath } from 'url'
 
-const dbPath = path.join(process.cwd(), 'crosstalk.db')
+// Resolve db path relative to this file's location (project root is 2 dirs up from src/lib/)
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const dbPath = path.join(__dirname, '..', '..', 'crosstalk.db')
 export const db = new Database(dbPath)
 
 db.exec(`

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useMemo } from 'react'
+import { useEffect, useRef, useCallback, useMemo, useImperativeHandle, forwardRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
@@ -129,7 +129,11 @@ const createDitheringShader = () => ({
   `,
 })
 
-export function NucleusVisualization({ tracks, onOrbitClick, onTrackClick, isAudioPlaying, audioEnergy, audioTempo }: NucleusVisualizationProps) {
+export interface NucleusVisualizationHandle {
+  resetCamera: () => void
+}
+
+export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, NucleusVisualizationProps>(function NucleusVisualization({ tracks, onOrbitClick, onTrackClick, isAudioPlaying, audioEnergy, audioTempo }, ref) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
@@ -154,6 +158,27 @@ export function NucleusVisualization({ tracks, onOrbitClick, onTrackClick, isAud
     audioEnergyRef.current = audioEnergy ?? 0.5
     audioTempoRef.current = audioTempo ?? 120
   }, [isAudioPlaying, audioEnergy, audioTempo])
+
+  useImperativeHandle(ref, () => ({
+    resetCamera: () => {
+      followedTrackIdRef.current = null
+      const camera = cameraRef.current
+      const controls = controlsRef.current
+      if (!camera || !controls) return
+      const targetPos = new THREE.Vector3(2, 1.5, 2)
+      const targetLookAt = new THREE.Vector3(0, 0, 0)
+      const animateReset = () => {
+        const distPos = camera.position.distanceTo(targetPos)
+        const distLook = controls.target.distanceTo(targetLookAt)
+        if (distPos > 0.01 || distLook > 0.01) {
+          camera.position.lerp(targetPos, 0.05)
+          controls.target.lerp(targetLookAt, 0.05)
+          requestAnimationFrame(animateReset)
+        }
+      }
+      animateReset()
+    },
+  }))
 
   // Brighten a color if it's too dark
   const ensureVisibleColor = useCallback((hexColor: string, minLuminance = 0.25): THREE.Color => {
@@ -1044,4 +1069,4 @@ export function NucleusVisualization({ tracks, onOrbitClick, onTrackClick, isAud
       ))}
     </div>
   )
-}
+})

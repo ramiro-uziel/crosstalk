@@ -1340,8 +1340,8 @@ input[type="color"]::-moz-color-swatch {
 /* Track Tooltip - Lidar Aesthetic */
 .track-tooltip {
   position: fixed;
-  left: 20px;
-  bottom: 20px;
+  right: 340px;
+  top: 20px;
   background: #000;
   border: 1px solid rgba(255, 255, 255, 0.3);
   padding: 0;
@@ -1375,7 +1375,7 @@ input[type="color"]::-moz-color-swatch {
 @keyframes tooltipSlideIn {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(-20px);
   }
   to {
     opacity: 1;
