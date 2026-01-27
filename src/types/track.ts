@@ -19,6 +19,7 @@ export interface Track {
   vocal_characteristics: string | null
   duration: number | null
   thumbnail_url: string | null
+  preview_url: string | null
   added_at: string
 }
 

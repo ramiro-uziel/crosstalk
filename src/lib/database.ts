@@ -1,7 +1,10 @@
 import Database from 'better-sqlite3'
 import path from 'path'
+import { fileURLToPath } from 'url'
 
-const dbPath = path.join(process.cwd(), 'crosstalk.db')
+// Resolve db path relative to this file's location (project root is 2 dirs up from src/lib/)
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const dbPath = path.join(__dirname, '..', '..', 'crosstalk.db')
 export const db = new Database(dbPath)
 
 db.exec(`
@@ -24,6 +27,7 @@ db.exec(`
     vocal_characteristics TEXT,
     duration INTEGER,
     thumbnail_url TEXT,
+    preview_url TEXT,
     added_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -54,6 +58,13 @@ try {
   // Column already exists, ignore
 }
 
+// Add preview_url column to tracks if it doesn't exist
+try {
+  db.exec(`ALTER TABLE tracks ADD COLUMN preview_url TEXT;`)
+} catch (e) {
+  // Column already exists, ignore
+}
+
 export const trackQueries = {
   getAll: db.prepare('SELECT * FROM tracks ORDER BY added_at DESC'),
   getById: db.prepare('SELECT * FROM tracks WHERE id = ?'),
@@ -63,8 +74,8 @@ export const trackQueries = {
       spotify_id, spotify_url, title, artist, lyrics, genius_url,
       has_audio_preview, emotion, valence, energy, tempo, genre,
       mood_description, dominant_instruments, vocal_characteristics,
-      duration, thumbnail_url
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      duration, thumbnail_url, preview_url
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `),
   delete: db.prepare('DELETE FROM tracks WHERE id = ?'),
   getByEmotion: db.prepare('SELECT * FROM tracks WHERE emotion = ? ORDER BY added_at DESC'),
