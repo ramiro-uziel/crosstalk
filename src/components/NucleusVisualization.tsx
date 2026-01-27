@@ -498,7 +498,7 @@ export function NucleusVisualization({ tracks, onOrbitClick, onTrackClick }: Nuc
 
     // Camera
     const camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 0.1, 100)
-    camera.position.set(2.5, 2, 2.5)
+    camera.position.set(2, 1.5, 2)
     scene.add(camera)
     cameraRef.current = camera
 
@@ -604,7 +604,7 @@ export function NucleusVisualization({ tracks, onOrbitClick, onTrackClick }: Nuc
       
       // Smoothly reset camera to default view
       const resetCamera = () => {
-        const targetPos = new THREE.Vector3(2.5, 2, 2.5)
+        const targetPos = new THREE.Vector3(2, 1.5, 2)
         const targetLookAt = new THREE.Vector3(0, 0, 0)
         
         const animateReset = () => {
