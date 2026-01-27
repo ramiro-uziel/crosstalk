@@ -4,6 +4,7 @@ import { Music, Sparkles, Plus, Trash2, MessageCircle, ChevronDown, ChevronUp, P
 import { NucleusVisualization } from '../components/NucleusVisualization'
 import { NucleusChat } from '../components/NucleusChat'
 import type { Track } from '../types/track'
+import { searchYouTube } from '../lib/youtube'
 import '../styles/galaxy.css'
 
 // YouTube IFrame API types
@@ -72,10 +73,14 @@ function App() {
   }, [])
 
   const searchYouTubeVideo = useCallback(async (track: Track): Promise<string | null> => {
-    const query = `${track.title} ${track.artist || ''} official audio`
-    const response = await fetch(`/api/youtube/search?q=${encodeURIComponent(query)}`)
-    const data = await response.json()
-    return data.videoId || null
+    try {
+      const query = `${track.title} ${track.artist || ''} official audio`
+      const result = await searchYouTube({ data: query })
+      return result.videoId || null
+    } catch (err) {
+      console.error('YouTube search failed:', err)
+      return null
+    }
   }, [])
 
   const createYTPlayer = useCallback((videoId: string, track: Track) => {

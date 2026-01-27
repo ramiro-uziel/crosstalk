@@ -16,7 +16,6 @@ import { Route as ApiChatIndexRouteImport } from './routes/api/chat/index'
 import { Route as DemoStartServerFuncsRouteImport } from './routes/demo/start.server-funcs'
 import { Route as DemoStartApiRequestRouteImport } from './routes/demo/start.api-request'
 import { Route as DemoApiNamesRouteImport } from './routes/demo/api.names'
-import { Route as ApiYoutubeSearchRouteImport } from './routes/api/youtube/search'
 import { Route as ApiTracksAnalyzeRouteImport } from './routes/api/tracks/analyze'
 import { Route as ApiNucleusRenameRouteImport } from './routes/api/nucleus/rename'
 import { Route as ApiLyricsSearchRouteImport } from './routes/api/lyrics/search'
@@ -61,11 +60,6 @@ const DemoStartApiRequestRoute = DemoStartApiRequestRouteImport.update({
 const DemoApiNamesRoute = DemoApiNamesRouteImport.update({
   id: '/demo/api/names',
   path: '/demo/api/names',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiYoutubeSearchRoute = ApiYoutubeSearchRouteImport.update({
-  id: '/api/youtube/search',
-  path: '/api/youtube/search',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiTracksAnalyzeRoute = ApiTracksAnalyzeRouteImport.update({
@@ -128,7 +122,6 @@ export interface FileRoutesByFullPath {
   '/api/lyrics/search': typeof ApiLyricsSearchRoute
   '/api/nucleus/rename': typeof ApiNucleusRenameRoute
   '/api/tracks/analyze': typeof ApiTracksAnalyzeRoute
-  '/api/youtube/search': typeof ApiYoutubeSearchRoute
   '/demo/api/names': typeof DemoApiNamesRoute
   '/demo/start/api-request': typeof DemoStartApiRequestRoute
   '/demo/start/server-funcs': typeof DemoStartServerFuncsRoute
@@ -148,7 +141,6 @@ export interface FileRoutesByTo {
   '/api/lyrics/search': typeof ApiLyricsSearchRoute
   '/api/nucleus/rename': typeof ApiNucleusRenameRoute
   '/api/tracks/analyze': typeof ApiTracksAnalyzeRoute
-  '/api/youtube/search': typeof ApiYoutubeSearchRoute
   '/demo/api/names': typeof DemoApiNamesRoute
   '/demo/start/api-request': typeof DemoStartApiRequestRoute
   '/demo/start/server-funcs': typeof DemoStartServerFuncsRoute
@@ -169,7 +161,6 @@ export interface FileRoutesById {
   '/api/lyrics/search': typeof ApiLyricsSearchRoute
   '/api/nucleus/rename': typeof ApiNucleusRenameRoute
   '/api/tracks/analyze': typeof ApiTracksAnalyzeRoute
-  '/api/youtube/search': typeof ApiYoutubeSearchRoute
   '/demo/api/names': typeof DemoApiNamesRoute
   '/demo/start/api-request': typeof DemoStartApiRequestRoute
   '/demo/start/server-funcs': typeof DemoStartServerFuncsRoute
@@ -191,7 +182,6 @@ export interface FileRouteTypes {
     | '/api/lyrics/search'
     | '/api/nucleus/rename'
     | '/api/tracks/analyze'
-    | '/api/youtube/search'
     | '/demo/api/names'
     | '/demo/start/api-request'
     | '/demo/start/server-funcs'
@@ -211,7 +201,6 @@ export interface FileRouteTypes {
     | '/api/lyrics/search'
     | '/api/nucleus/rename'
     | '/api/tracks/analyze'
-    | '/api/youtube/search'
     | '/demo/api/names'
     | '/demo/start/api-request'
     | '/demo/start/server-funcs'
@@ -231,7 +220,6 @@ export interface FileRouteTypes {
     | '/api/lyrics/search'
     | '/api/nucleus/rename'
     | '/api/tracks/analyze'
-    | '/api/youtube/search'
     | '/demo/api/names'
     | '/demo/start/api-request'
     | '/demo/start/server-funcs'
@@ -252,7 +240,6 @@ export interface RootRouteChildren {
   ApiLyricsSearchRoute: typeof ApiLyricsSearchRoute
   ApiNucleusRenameRoute: typeof ApiNucleusRenameRoute
   ApiTracksAnalyzeRoute: typeof ApiTracksAnalyzeRoute
-  ApiYoutubeSearchRoute: typeof ApiYoutubeSearchRoute
   DemoApiNamesRoute: typeof DemoApiNamesRoute
   DemoStartApiRequestRoute: typeof DemoStartApiRequestRoute
   DemoStartServerFuncsRoute: typeof DemoStartServerFuncsRoute
@@ -313,13 +300,6 @@ declare module '@tanstack/react-router' {
       path: '/demo/api/names'
       fullPath: '/demo/api/names'
       preLoaderRoute: typeof DemoApiNamesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/youtube/search': {
-      id: '/api/youtube/search'
-      path: '/api/youtube/search'
-      fullPath: '/api/youtube/search'
-      preLoaderRoute: typeof ApiYoutubeSearchRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/tracks/analyze': {
@@ -404,7 +384,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiLyricsSearchRoute: ApiLyricsSearchRoute,
   ApiNucleusRenameRoute: ApiNucleusRenameRoute,
   ApiTracksAnalyzeRoute: ApiTracksAnalyzeRoute,
-  ApiYoutubeSearchRoute: ApiYoutubeSearchRoute,
   DemoApiNamesRoute: DemoApiNamesRoute,
   DemoStartApiRequestRoute: DemoStartApiRequestRoute,
   DemoStartServerFuncsRoute: DemoStartServerFuncsRoute,
