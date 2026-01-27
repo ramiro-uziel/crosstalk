@@ -1,17 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Music, Sparkles, Plus, Trash2, MessageCircle, ChevronDown, ChevronUp } from 'lucide-react'
-import { GalaxyVisualization } from '../components/GalaxyVisualization'
+import { NucleusVisualization } from '../components/NucleusVisualization'
 import { NucleusChat } from '../components/NucleusChat'
-import { EmotionChat } from '../components/EmotionChat'
 import type { Track } from '../types/track'
 import '../styles/galaxy.css'
 
-interface FocusedEmotionInfo {
-  emotion: {
-    name: string
-    color: string
-  }
+interface OrbitInfo {
+  orbitIndex: number
   tracks: Track[]
 }
 
@@ -25,13 +21,7 @@ function App() {
   const [nucleusName, setNucleusName] = useState('The Nucleus')
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null)
-
-  // Galaxy focus state
-  const [focusedEmotion, setFocusedEmotion] = useState<FocusedEmotionInfo | null>(null)
-  const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null)
-
-  // Emotion chat state
-  const [isEmotionChatOpen, setIsEmotionChatOpen] = useState(false)
+  const [selectedOrbit, setSelectedOrbit] = useState<number | null>(null)
 
   // Track card expansion state
   const [expandedTracks, setExpandedTracks] = useState<Set<number>>(new Set())
@@ -137,49 +127,68 @@ function App() {
     }
   }
 
-  const handleEmotionFocus = (
-    info: FocusedEmotionInfo | null,
-    screenPosition: { x: number; y: number } | null
-  ) => {
-    setFocusedEmotion(info)
-    setTooltipPosition(screenPosition)
-    if (!info) {
-      setIsEmotionChatOpen(false)
+  const handleOrbitClick = (orbitInfo: OrbitInfo | null) => {
+    if (orbitInfo) {
+      setSelectedOrbit(orbitInfo.orbitIndex)
+    } else {
+      setSelectedOrbit(null)
     }
   }
 
-  const groupedByEmotion = tracks.reduce((acc, track) => {
-    if (!acc[track.emotion]) acc[track.emotion] = []
-    acc[track.emotion].push(track)
-    return acc
-  }, {} as Record<string, Track[]>)
+  const handleTrackClick = (track: Track) => {
+    setSelectedTrack(track)
+  }
+
+  // Sort tracks by added_at (newest first)
+  const sortedTracks = useMemo(() => {
+    return [...tracks].sort((a, b) =>
+      new Date(b.added_at).getTime() - new Date(a.added_at).getTime()
+    )
+  }, [tracks])
+
+  // Distribute tracks across orbits (newest = inner, oldest = outer)
+  const tracksByOrbit = useMemo(() => {
+    const orbits: Track[][] = Array(6).fill(null).map(() => [])
+    const tracksPerOrbit = Math.ceil(sortedTracks.length / 6)
+
+    sortedTracks.forEach((track, index) => {
+      const orbitIndex = Math.min(Math.floor(index / Math.max(tracksPerOrbit, 1)), 5)
+      orbits[orbitIndex].push(track)
+    })
+
+    return orbits
+  }, [sortedTracks])
+
+  // Filter tracks by selected orbit
+  const filteredTracks = selectedOrbit !== null
+    ? tracksByOrbit[selectedOrbit - 1] || []
+    : sortedTracks
 
   return (
-    <div className="galaxy-container">
-      {/* Galaxy takes full screen minus sidebar width */}
+    <div className="nucleus-container">
+      {/* Visualization takes full screen minus sidebar width */}
       <div className="fixed inset-0 right-80">
-        <GalaxyVisualization
+        <NucleusVisualization
           tracks={tracks}
-          onEmotionFocus={handleEmotionFocus}
-          onTrackClick={setSelectedTrack}
+          onOrbitClick={handleOrbitClick}
+          onTrackClick={handleTrackClick}
         />
       </div>
 
       {/* Header */}
-      <header className="fixed top-0 left-0 right-80 z-50 bg-black/80 backdrop-blur-sm border-b border-white/10 p-4">
+      <header className="fixed top-0 left-0 right-80 z-50 bg-black/90 backdrop-blur-sm border-b border-white/20 p-4">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <Music className="w-8 h-8 text-cyan-400" />
+            <Music className="w-8 h-8 text-white" />
             <div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
+              <h1 className="text-2xl font-bold text-white">
                 {nucleusName}
               </h1>
-              <p className="text-sm text-gray-400">{tracks.length} tracks orbiting</p>
             </div>
           </div>
           <button
             onClick={() => setIsChatOpen(!isChatOpen)}
-            className="flex items-center gap-2 px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-lg transition-colors text-white"
+            className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/30 transition-colors text-white font-mono"
           >
             <MessageCircle className="w-5 h-5" />
             Chat
@@ -193,13 +202,13 @@ function App() {
             onChange={e => setSpotifyUrl(e.target.value)}
             onKeyPress={e => e.key === 'Enter' && addTrack()}
             placeholder="Paste Spotify track URL..."
-            className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50"
+            className="flex-1 bg-black border border-white/30 px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-white font-mono"
             disabled={isAnalyzing}
           />
           <button
             onClick={addTrack}
             disabled={!spotifyUrl.trim() || isAnalyzing}
-            className="px-6 py-2 bg-cyan-500 hover:bg-cyan-600 disabled:bg-gray-700 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center gap-2 font-semibold text-white"
+            className="px-6 py-2 bg-white text-black hover:bg-gray-200 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors flex items-center gap-2 font-semibold font-mono"
           >
             <Plus className="w-5 h-5" />
             {isAnalyzing ? 'Analyzing...' : 'Add Track'}
@@ -207,98 +216,94 @@ function App() {
         </div>
 
         {error && (
-          <div className="mt-2 text-red-400 text-sm">
+          <div className="mt-2 text-white text-sm font-mono border border-white/50 bg-white/10 p-2">
             {error}
           </div>
         )}
       </header>
 
       {/* Sidebar */}
-      <div className="fixed right-0 top-0 w-80 h-screen bg-black/90 backdrop-blur-sm border-l border-white/10 overflow-y-auto z-40 pt-36">
-        <div className="p-4">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-white">
-            <Sparkles className="w-5 h-5 text-cyan-400" />
-            Track Collection
-          </h2>
+      <div className="fixed right-0 top-0 w-80 h-screen bg-black border-l border-white/20 overflow-y-auto z-40 pt-8">
+        <div className="pb-4 px-4">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold flex items-center gap-2 text-white font-mono">
+              <Sparkles className="w-5 h-5" />
+              {selectedOrbit !== null ? `Orbit ${selectedOrbit}` : 'All Tracks'}
+            </h2>
+            {selectedOrbit !== null && (
+              <button
+                onClick={() => setSelectedOrbit(null)}
+                className="text-xs text-white/60 hover:text-white font-mono border border-white/30 px-2 py-1"
+              >
+                Clear Filter
+              </button>
+            )}
+          </div>
 
-          {Object.entries(groupedByEmotion).map(([emotion, emotionTracks]) => (
-            <div key={emotion} className="mb-4">
-              <h3 className="text-sm font-semibold text-gray-400 mb-2 capitalize">
-                {emotion} ({emotionTracks.length})
-              </h3>
-              <div className="space-y-2">
-                {emotionTracks.map(track => {
-                  const isExpanded = expandedTracks.has(track.id)
-                  return (
-                    <div
-                      key={track.id}
-                      className="bg-white/5 border border-white/10 rounded-lg p-3 hover:bg-white/10 transition-colors group"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm text-white truncate">{track.title}</p>
-                          <p className="text-xs text-gray-400 truncate">{track.artist}</p>
-                          {track.genre && (
-                            <p className="text-xs text-cyan-400 mt-1">{track.genre}</p>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => deleteTrack(track.id)}
-                          className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-400 transition-all flex-shrink-0"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                      {track.mood_description && (
-                        <div className="mt-2">
-                          <p className={`text-xs text-gray-300 ${isExpanded ? '' : 'line-clamp-2'}`}>
-                            {track.mood_description}
-                          </p>
-                          {track.mood_description.length > 100 && (
-                            <button
-                              onClick={() => toggleTrackExpanded(track.id)}
-                              className="text-xs text-cyan-400 hover:text-cyan-300 mt-1 flex items-center gap-1"
-                            >
-                              {isExpanded ? (
-                                <>
-                                  <ChevronUp className="w-3 h-3" />
-                                  Show less
-                                </>
-                              ) : (
-                                <>
-                                  <ChevronDown className="w-3 h-3" />
-                                  Show more
-                                </>
-                              )}
-                            </button>
-                          )}
-                        </div>
-                      )}
-                      {track.vocal_characteristics && (
-                        <p className={`text-xs text-gray-400 mt-1 ${isExpanded ? '' : 'hidden'}`}>
-                          <span className="text-gray-500">Style:</span> {track.vocal_characteristics}
-                        </p>
-                      )}
-                      {track.lyrics && (
-                        <a
-                          href={track.genius_url || '#'}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-purple-400 hover:underline mt-2 inline-block"
-                        >
-                          View lyrics
-                        </a>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
+          {/* Orbit navigation */}
+          <div className="flex gap-1 mb-4 flex-wrap">
+            {[1, 2, 3, 4, 5, 6].map(orbit => (
+              <button
+                key={orbit}
+                onClick={() => setSelectedOrbit(selectedOrbit === orbit ? null : orbit)}
+                className={`px-3 py-1 text-xs font-mono border transition-colors ${
+                  selectedOrbit === orbit
+                    ? 'bg-white text-black border-white'
+                    : 'bg-black text-white border-white/30 hover:border-white'
+                }`}
+              >
+                {orbit}
+              </button>
+            ))}
+          </div>
+
+          <div className="text-xs text-white/50 font-mono mb-4">
+            Orbit 1: Newest | Orbit 6: Oldest
+          </div>
+
+          {/* Track list by orbit */}
+          {selectedOrbit === null ? (
+            // Show all tracks grouped by orbit
+            tracksByOrbit.map((orbitTracks, orbitIndex) => (
+              orbitTracks.length > 0 && (
+                <div key={orbitIndex} className="mb-4">
+                  <h3 className="text-sm font-semibold text-white/60 mb-2 font-mono border-b border-white/20 pb-1">
+                    Orbit {orbitIndex + 1} ({orbitTracks.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {orbitTracks.map(track => (
+                      <TrackCard
+                        key={track.id}
+                        track={track}
+                        isExpanded={expandedTracks.has(track.id)}
+                        onToggleExpand={() => toggleTrackExpanded(track.id)}
+                        onDelete={() => deleteTrack(track.id)}
+                        isSelected={selectedTrack?.id === track.id}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )
+            ))
+          ) : (
+            // Show filtered tracks
+            <div className="space-y-2">
+              {filteredTracks.map(track => (
+                <TrackCard
+                  key={track.id}
+                  track={track}
+                  isExpanded={expandedTracks.has(track.id)}
+                  onToggleExpand={() => toggleTrackExpanded(track.id)}
+                  onDelete={() => deleteTrack(track.id)}
+                  isSelected={selectedTrack?.id === track.id}
+                />
+              ))}
             </div>
-          ))}
+          )}
 
           {tracks.length === 0 && (
-            <div className="text-center text-gray-500 py-12">
-              <Music className="w-12 h-12 mx-auto mb-4 text-gray-600" />
+            <div className="text-center text-white/50 py-12 font-mono">
+              <Music className="w-12 h-12 mx-auto mb-4 text-white/30" />
               <p className="text-white">No tracks yet</p>
               <p className="text-sm mt-2">Add a Spotify track to begin</p>
             </div>
@@ -306,105 +311,32 @@ function App() {
         </div>
       </div>
 
-      {/* Connection line and tooltip */}
-      {focusedEmotion && tooltipPosition && (
-        <>
-          <svg
-            className="connection-line"
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              pointerEvents: 'none',
-              zIndex: 999,
-            }}
-          >
-            <defs>
-              <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" style={{ stopColor: focusedEmotion.emotion.color, stopOpacity: 0.8 }} />
-                <stop offset="100%" style={{ stopColor: focusedEmotion.emotion.color, stopOpacity: 0.2 }} />
-              </linearGradient>
-            </defs>
-            <line
-              x1={tooltipPosition.x - 200}
-              y1={tooltipPosition.y + 50}
-              x2={tooltipPosition.x}
-              y2={tooltipPosition.y}
-              stroke="url(#lineGradient)"
-              strokeWidth="2"
-              strokeDasharray="4 4"
-            />
-          </svg>
-
-          <div
-            className="star-tooltip"
-            style={{
-              left: tooltipPosition.x,
-              top: tooltipPosition.y,
-            }}
-            onClick={e => {
-              e.stopPropagation()
-              e.nativeEvent.stopImmediatePropagation()
-            }}
-          >
-            <div className="tooltip-header">
-              <div
-                className="tooltip-icon"
-                style={{ background: focusedEmotion.emotion.color }}
-              />
-              <h3 className="tooltip-title">{focusedEmotion.emotion.name}</h3>
-            </div>
-            <div className="tooltip-divider" />
-            <div className="tooltip-content">
-              <p className="tooltip-label">Orbiting Tracks</p>
-              {focusedEmotion.tracks.length > 0 ? (
-                <ul className="tooltip-songs">
-                  {focusedEmotion.tracks.map(track => (
-                    <li
-                      key={track.id}
-                      className="tooltip-song"
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <span
-                        className="song-bullet"
-                        style={{ color: focusedEmotion.emotion.color }}
-                      >
-                        *
-                      </span>
-                      <div className="song-info">
-                        <div className="song-title">{track.title}</div>
-                        {track.artist && <div className="song-artist">{track.artist}</div>}
-                        {track.genre && (
-                          <div className="song-meta">
-                            {track.genre} {track.tempo ? ` - ${track.tempo} BPM` : ''}
-                          </div>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="tooltip-empty">No tracks yet. Add one!</p>
-              )}
-
-              {/* Talk to Emotion button */}
-              <button
-                onClick={() => setIsEmotionChatOpen(true)}
-                className="w-full mt-4 px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-                style={{
-                  background: `${focusedEmotion.emotion.color}20`,
-                  border: `1px solid ${focusedEmotion.emotion.color}50`,
-                  color: focusedEmotion.emotion.color,
-                }}
-              >
-                <MessageCircle className="w-4 h-4" />
-                Talk to {focusedEmotion.emotion.name}
-              </button>
-            </div>
+      {/* Track tooltip */}
+      {selectedTrack && (
+        <div className="track-tooltip">
+          <div className="tooltip-header">
+            <div className="tooltip-icon" />
+            <h3 className="tooltip-title">{selectedTrack.title}</h3>
           </div>
-        </>
+          <div className="tooltip-divider" />
+          <div className="tooltip-content">
+            {selectedTrack.artist && (
+              <p className="tooltip-artist">{selectedTrack.artist}</p>
+            )}
+            {selectedTrack.genre && (
+              <p className="tooltip-genre">{selectedTrack.genre}</p>
+            )}
+            {selectedTrack.mood_description && (
+              <p className="tooltip-mood">{selectedTrack.mood_description}</p>
+            )}
+            <button
+              onClick={() => setSelectedTrack(null)}
+              className="tooltip-close"
+            >
+              Close
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Nucleus Chat */}
@@ -413,15 +345,79 @@ function App() {
         isOpen={isChatOpen}
         onClose={() => setIsChatOpen(false)}
       />
+    </div>
+  )
+}
 
-      {/* Emotion Chat */}
-      {focusedEmotion && (
-        <EmotionChat
-          emotion={focusedEmotion.emotion.name.toLowerCase()}
-          emotionColor={focusedEmotion.emotion.color}
-          isOpen={isEmotionChatOpen}
-          onClose={() => setIsEmotionChatOpen(false)}
-        />
+interface TrackCardProps {
+  track: Track
+  isExpanded: boolean
+  onToggleExpand: () => void
+  onDelete: () => void
+  isSelected: boolean
+}
+
+function TrackCard({ track, isExpanded, onToggleExpand, onDelete, isSelected }: TrackCardProps) {
+  return (
+    <div
+      className={`bg-black border border-white/20 p-3 transition-colors group font-mono ${
+        isSelected ? 'border-white' : 'hover:border-white/50'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-sm text-white truncate">{track.title}</p>
+          <p className="text-xs text-white/60 truncate">{track.artist}</p>
+          {track.genre && (
+            <p className="text-xs text-white/40 mt-1">{track.genre}</p>
+          )}
+        </div>
+        <button
+          onClick={onDelete}
+          className="opacity-0 group-hover:opacity-100 text-white/40 hover:text-white transition-all flex-shrink-0"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+      {track.mood_description && (
+        <div className="mt-2">
+          <p className={`text-xs text-white/60 ${isExpanded ? '' : 'line-clamp-2'}`}>
+            {track.mood_description}
+          </p>
+          {track.mood_description.length > 100 && (
+            <button
+              onClick={onToggleExpand}
+              className="text-xs text-white/40 hover:text-white mt-1 flex items-center gap-1"
+            >
+              {isExpanded ? (
+                <>
+                  <ChevronUp className="w-3 h-3" />
+                  Show less
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-3 h-3" />
+                  Show more
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      )}
+      {track.vocal_characteristics && (
+        <p className={`text-xs text-white/40 mt-1 ${isExpanded ? '' : 'hidden'}`}>
+          <span className="text-white/30">Style:</span> {track.vocal_characteristics}
+        </p>
+      )}
+      {track.lyrics && (
+        <a
+          href={track.genius_url || '#'}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-white/50 hover:text-white hover:underline mt-2 inline-block"
+        >
+          View lyrics
+        </a>
       )}
     </div>
   )

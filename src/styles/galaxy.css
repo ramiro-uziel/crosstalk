@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap");
 
 .galaxy-container {
   width: 100vw;
@@ -25,7 +25,7 @@
   padding: 24px;
   min-width: 320px;
   max-width: 400px;
-  font-family: "Instrument Sans", sans-serif;
+  font-family: "JetBrains Mono", sans-serif;
   color: #fff;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   z-index: 1000;
@@ -146,7 +146,7 @@ input[type="color"]::-moz-color-swatch {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 0;
   padding: 12px 16px;
-  font-family: "Instrument Sans", sans-serif;
+  font-family: "JetBrains Mono", sans-serif;
   font-size: 12px;
   color: #fff;
   cursor: pointer;
@@ -168,7 +168,7 @@ input[type="color"]::-moz-color-swatch {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 0;
   padding: 12px 16px;
-  font-family: "Instrument Sans", sans-serif;
+  font-family: "JetBrains Mono", sans-serif;
   font-size: 12px;
   color: #fff;
   cursor: pointer;
@@ -195,7 +195,7 @@ input[type="color"]::-moz-color-swatch {
   border-radius: 0;
   padding: 20px;
   max-width: 300px;
-  font-family: "Instrument Sans", sans-serif;
+  font-family: "JetBrains Mono", sans-serif;
   color: #fff;
   z-index: 1000;
 }
@@ -241,7 +241,7 @@ input[type="color"]::-moz-color-swatch {
   padding: 0;
   min-width: 280px;
   max-width: 320px;
-  font-family: "Instrument Sans", sans-serif;
+  font-family: "JetBrains Mono", sans-serif;
   color: #fff;
   z-index: 1000;
   box-shadow:
@@ -413,7 +413,7 @@ input[type="color"]::-moz-color-swatch {
   transform: translateX(-50%);
   padding: 12px 24px;
   font-size: 14px;
-  font-family: "Instrument Sans", sans-serif;
+  font-family: "JetBrains Mono", sans-serif;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 30px;
@@ -529,7 +529,7 @@ input[type="color"]::-moz-color-swatch {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 0;
   color: #fff;
-  font-family: "Instrument Sans", sans-serif;
+  font-family: "JetBrains Mono", sans-serif;
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s;
@@ -555,7 +555,7 @@ input[type="color"]::-moz-color-swatch {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 0;
   padding: 0;
-  font-family: "Instrument Sans", sans-serif;
+  font-family: "JetBrains Mono", sans-serif;
   color: #fff;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   z-index: 1002;
@@ -827,7 +827,7 @@ input[type="color"]::-moz-color-swatch {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 0;
   color: #fff;
-  font-family: "Instrument Sans", sans-serif;
+  font-family: "JetBrains Mono", sans-serif;
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s;
@@ -854,7 +854,7 @@ input[type="color"]::-moz-color-swatch {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 0;
   padding: 0;
-  font-family: "Instrument Sans", sans-serif;
+  font-family: "JetBrains Mono", sans-serif;
   color: #fff;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   z-index: 1002;
@@ -997,7 +997,7 @@ input[type="color"]::-moz-color-swatch {
   background: #000;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 0;
-  font-family: "Instrument Sans", sans-serif;
+  font-family: "JetBrains Mono", sans-serif;
   color: #fff;
   z-index: 1003;
   animation: slideInFromLeft 0.3s ease-out;
@@ -1035,7 +1035,7 @@ input[type="color"]::-moz-color-swatch {
   background: #000;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 0;
-  font-family: "Instrument Sans", sans-serif;
+  font-family: "JetBrains Mono", sans-serif;
   z-index: 1002;
   animation: slideInFromBottom 0.3s ease-out;
 }
@@ -1222,7 +1222,7 @@ input[type="color"]::-moz-color-swatch {
   min-width: 320px;
   max-width: 400px;
   text-align: center;
-  font-family: "Instrument Sans", sans-serif;
+  font-family: "JetBrains Mono", sans-serif;
   color: #fff;
   animation: scaleIn 0.3s ease-out;
 }
@@ -1304,7 +1304,7 @@ input[type="color"]::-moz-color-swatch {
   color: #fff;
   font-size: 14px;
   font-weight: 600;
-  font-family: "Instrument Sans", sans-serif;
+  font-family: "JetBrains Mono", sans-serif;
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -1316,4 +1316,227 @@ input[type="color"]::-moz-color-swatch {
 
 .success-modal-btn:active {
   transform: translateY(0);
+}
+
+/* ============================================
+   NUCLEUS VISUALIZATION STYLES
+   Lidar/Half-tone aesthetic - Monochrome
+   ============================================ */
+
+.nucleus-container {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+  background: #000;
+}
+
+.nucleus-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Track Tooltip - Lidar Aesthetic */
+.track-tooltip {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 0;
+  min-width: 300px;
+  max-width: 380px;
+  font-family: "JetBrains Mono", monospace;
+  color: #fff;
+  z-index: 1000;
+  animation: tooltipSlideIn 0.3s ease-out;
+}
+
+/* Scanline overlay effect */
+.track-tooltip::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 255, 255, 0.03) 2px,
+    rgba(255, 255, 255, 0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+@keyframes tooltipSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.track-tooltip .tooltip-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.track-tooltip .tooltip-icon {
+  width: 8px;
+  height: 8px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #fff, 0 0 20px #fff;
+  animation: lidarPulse 1s ease-in-out infinite;
+}
+
+@keyframes lidarPulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 10px #fff, 0 0 20px #fff;
+  }
+  50% {
+    opacity: 0.6;
+    box-shadow: 0 0 5px #fff, 0 0 10px #fff;
+  }
+}
+
+.track-tooltip .tooltip-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: #fff;
+  text-transform: uppercase;
+  background: none;
+  -webkit-text-fill-color: #fff;
+}
+
+.track-tooltip .tooltip-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.2);
+  margin: 0;
+}
+
+.track-tooltip .tooltip-content {
+  padding: 16px;
+  position: relative;
+  z-index: 2;
+}
+
+.track-tooltip .tooltip-artist {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.track-tooltip .tooltip-genre {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 12px;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: inline-block;
+}
+
+.track-tooltip .tooltip-mood {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.track-tooltip .tooltip-close {
+  width: 100%;
+  padding: 10px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.track-tooltip .tooltip-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* Orbit indicator styles */
+.orbit-indicator {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  padding: 12px 20px;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-family: "JetBrains Mono", monospace;
+  z-index: 1000;
+}
+
+.orbit-dot {
+  width: 10px;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.orbit-dot:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.orbit-dot.active {
+  background: #fff;
+  box-shadow: 0 0 10px #fff;
+}
+
+/* Monochrome button overrides */
+.nucleus-container button {
+  border-radius: 0;
+}
+
+/* Lidar grid overlay (optional background effect) */
+.lidar-grid {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 49px,
+      rgba(255, 255, 255, 0.02) 49px,
+      rgba(255, 255, 255, 0.02) 50px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 49px,
+      rgba(255, 255, 255, 0.02) 49px,
+      rgba(255, 255, 255, 0.02) 50px
+    );
+  pointer-events: none;
+  z-index: 0;
 }
