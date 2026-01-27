@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { Music, Sparkles, Plus, Trash2, MessageCircle, ChevronDown, ChevronUp, Pause, Play, Volume2, X } from 'lucide-react'
+import { Music, Sparkles, Plus, Trash2, ChevronDown, ChevronUp, Pause, Play, Volume2, X } from 'lucide-react'
 import { NucleusVisualization } from '../components/NucleusVisualization'
 import type { NucleusVisualizationHandle } from '../components/NucleusVisualization'
 import { NucleusChat } from '../components/NucleusChat'
@@ -478,62 +478,44 @@ function App() {
           tracks={tracks}
           onOrbitClick={handleOrbitClick}
           onTrackClick={handleTrackClick}
+          onNucleusClick={() => setIsChatOpen(!isChatOpen)}
           isAudioPlaying={isPlaying}
           audioEnergy={playingTrack?.energy ?? undefined}
           audioTempo={playingTrack?.tempo ?? undefined}
         />
       </div>
 
-      {/* Header */}
-      <header className="fixed top-0 left-0 right-80 z-50 bg-black/90 backdrop-blur-sm border-b border-white/20 p-4">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <Music className="w-8 h-8 text-white" />
-            <div>
-              <h1 className="text-2xl font-bold text-white">
-                {nucleusName}
-              </h1>
-            </div>
-          </div>
-          <button
-            onClick={() => setIsChatOpen(!isChatOpen)}
-            className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/30 transition-colors text-white font-mono"
-          >
-            <MessageCircle className="w-5 h-5" />
-            Chat
-          </button>
-        </div>
-
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={spotifyUrl}
-            onChange={e => setSpotifyUrl(e.target.value)}
-            onKeyPress={e => e.key === 'Enter' && addTrack()}
-            placeholder="Paste Spotify track URL..."
-            className="flex-1 bg-black border border-white/30 px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-white font-mono"
-            disabled={isAnalyzing}
-          />
-          <button
-            onClick={addTrack}
-            disabled={!spotifyUrl.trim() || isAnalyzing}
-            className="px-6 py-2 bg-white text-black hover:bg-gray-200 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors flex items-center gap-2 font-semibold font-mono"
-          >
-            <Plus className="w-5 h-5" />
-            {isAnalyzing ? 'Analyzing...' : 'Add Track'}
-          </button>
-        </div>
-
-        {error && (
-          <div className="mt-2 text-white text-sm font-mono border border-white/50 bg-white/10 p-2">
-            {error}
-          </div>
-        )}
-      </header>
-
       {/* Sidebar */}
-      <div className="fixed right-0 top-0 w-80 h-screen bg-black border-l border-white/20 overflow-y-auto z-40 pt-8">
-        <div className="pb-4 px-4">
+      <div className="fixed right-0 top-0 w-80 h-screen bg-black border-l border-white/20 overflow-y-auto z-40">
+        <div className="pb-4 px-4 pt-4">
+          {/* Add Track Input */}
+          <div className="mb-4">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={spotifyUrl}
+                onChange={e => setSpotifyUrl(e.target.value)}
+                onKeyPress={e => e.key === 'Enter' && addTrack()}
+                placeholder="Paste Spotify URL..."
+                className="flex-1 bg-black border border-white/30 px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-white font-mono"
+                disabled={isAnalyzing}
+              />
+              <button
+                onClick={addTrack}
+                disabled={!spotifyUrl.trim() || isAnalyzing}
+                className="px-3 py-2 bg-white text-black hover:bg-gray-200 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors flex items-center gap-1 font-semibold font-mono text-sm"
+              >
+                <Plus className="w-4 h-4" />
+                {isAnalyzing ? '...' : 'Add'}
+              </button>
+            </div>
+            {error && (
+              <div className="mt-2 text-white text-xs font-mono border border-white/50 bg-white/10 p-2">
+                {error}
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold flex items-center gap-2 text-white font-mono">
               <Sparkles className="w-5 h-5" />
