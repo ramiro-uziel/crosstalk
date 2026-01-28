@@ -28,6 +28,43 @@ async function getAccessToken(clientId: string, clientSecret: string): Promise<s
   return accessToken
 }
 
+// Fetch user's top tracks (this is what Spotify uses for "On Repeat")
+export async function fetchUserTopTracks(
+  userAccessToken: string,
+  limit = 15
+): Promise<SpotifyMetadata[]> {
+  const response = await fetch(
+    `https://api.spotify.com/v1/me/top/tracks?limit=${limit}&time_range=short_term`,
+    {
+      headers: {
+        'Authorization': `Bearer ${userAccessToken}`,
+      },
+    }
+  )
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch top tracks: ${response.statusText}`)
+  }
+
+  const data = await response.json()
+  return data.items as SpotifyMetadata[]
+}
+
+// Get user's profile
+export async function fetchUserProfile(userAccessToken: string) {
+  const response = await fetch('https://api.spotify.com/v1/me', {
+    headers: {
+      'Authorization': `Bearer ${userAccessToken}`,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch user profile: ${response.statusText}`)
+  }
+
+  return await response.json()
+}
+
 export function extractSpotifyTrackId(url: string): string | null {
   const regex = /track\/([a-zA-Z0-9]+)/
   const match = url.match(regex)
