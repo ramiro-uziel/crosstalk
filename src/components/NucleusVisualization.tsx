@@ -132,7 +132,9 @@ const createDitheringShader = () => ({
 
 export interface NucleusVisualizationHandle {
   resetCamera: () => void
+  zoomToNucleus: () => void
   getTrackScreenPosition: (trackId: number) => { x: number; y: number } | null
+  getNucleusScreenPosition: () => { x: number; y: number } | null
 }
 
 export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, NucleusVisualizationProps>(function NucleusVisualization({ tracks, onOrbitClick, onTrackClick, onNucleusClick, isAudioPlaying, audioEnergy, audioTempo }, ref) {
@@ -180,6 +182,25 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
       }
       animateReset()
     },
+    zoomToNucleus: () => {
+      followedTrackIdRef.current = null
+      const camera = cameraRef.current
+      const controls = controlsRef.current
+      if (!camera || !controls) return
+      // Offset right so nucleus appears further left in the viewport
+      const targetPos = new THREE.Vector3(1.0, 0.3, 0.6)
+      const targetLookAt = new THREE.Vector3(0, 0, 0)
+      const animateZoom = () => {
+        const distPos = camera.position.distanceTo(targetPos)
+        const distLook = controls.target.distanceTo(targetLookAt)
+        if (distPos > 0.01 || distLook > 0.01) {
+          camera.position.lerp(targetPos, 0.05)
+          controls.target.lerp(targetLookAt, 0.05)
+          requestAnimationFrame(animateZoom)
+        }
+      }
+      animateZoom()
+    },
     getTrackScreenPosition: (trackId: number) => {
       const camera = cameraRef.current
       const renderer = rendererRef.current
@@ -195,6 +216,21 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
       const screenPos = worldPos.clone().project(camera)
 
       // Convert to pixel coordinates
+      const canvas = renderer.domElement
+      const x = (screenPos.x * 0.5 + 0.5) * canvas.clientWidth
+      const y = (-(screenPos.y * 0.5) + 0.5) * canvas.clientHeight
+
+      return { x, y }
+    },
+    getNucleusScreenPosition: () => {
+      const camera = cameraRef.current
+      const renderer = rendererRef.current
+      if (!camera || !renderer) return null
+
+      // Nucleus is at the world origin
+      const worldPos = new THREE.Vector3(0, 0, 0)
+      const screenPos = worldPos.project(camera)
+
       const canvas = renderer.domElement
       const x = (screenPos.x * 0.5 + 0.5) * canvas.clientWidth
       const y = (-(screenPos.y * 0.5) + 0.5) * canvas.clientHeight
@@ -1048,7 +1084,18 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
     raycaster.params.Points = { threshold: 0.25 } // Larger threshold for easier clicking on moving points
     const mouse = new THREE.Vector2()
 
+    // Track mouse movement to distinguish clicks from drags
+    let mouseDownPos = { x: 0, y: 0 }
+    const onMouseDown = (event: MouseEvent) => {
+      mouseDownPos = { x: event.clientX, y: event.clientY }
+    }
+    canvas.addEventListener('mousedown', onMouseDown)
+
     const onClick = (event: MouseEvent) => {
+      const dx = event.clientX - mouseDownPos.x
+      const dy = event.clientY - mouseDownPos.y
+      const isDrag = Math.sqrt(dx * dx + dy * dy) > 5
+      if (isDrag) return
       const rect = container.getBoundingClientRect()
       mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
       mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
@@ -1088,21 +1135,6 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
         }
       }
 
-      // Check orbit rings (they're inside groups)
-      const orbitRingMeshes = orbitGroups.map(g => g.children[0]).filter(Boolean)
-      const orbitIntersects = raycaster.intersectObjects(orbitRingMeshes)
-      if (orbitIntersects.length > 0) {
-        const intersectedRing = orbitIntersects[0].object
-        const orbitIndex = orbitRingMeshes.indexOf(intersectedRing)
-        if (orbitIndex !== -1 && onOrbitClickRef.current) {
-          onOrbitClickRef.current({
-            orbitIndex: orbitIndex + 1,
-            tracks: tracksByOrbitRef.current[orbitIndex] || [],
-          })
-        }
-        return
-      }
-
       // Clicked empty space - stop following and reset camera
       followedTrackIdRef.current = null
       
@@ -1130,9 +1162,17 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
 
     canvas.addEventListener('click', onClick)
 
-    // Handle resize
-    const handleResize = () => {
-      if (!container) return
+    // Handle resize — mark dirty so the animation loop applies it
+    // immediately before the next render (avoids black flash from clearing the buffer)
+    let needsResize = false
+
+    const markResizeDirty = () => {
+      needsResize = true
+    }
+
+    const applyResize = () => {
+      if (!needsResize || !container) return
+      needsResize = false
       sizes.width = container.clientWidth
       sizes.height = container.clientHeight
       camera.aspect = sizes.width / sizes.height
@@ -1142,7 +1182,11 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
       ditheringPass.uniforms.resolution.value.set(sizes.width, sizes.height)
     }
 
-    window.addEventListener('resize', handleResize)
+    window.addEventListener('resize', markResizeDirty)
+
+    // Also observe container size changes (e.g. sidebar collapse)
+    const resizeObserver = new ResizeObserver(markResizeDirty)
+    resizeObserver.observe(container)
 
     // Animation loop
     const clock = new THREE.Clock()
@@ -1268,6 +1312,7 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
       }
 
       controls.update()
+      applyResize()
       composer.render()
       animationIdRef.current = requestAnimationFrame(animate)
     }
@@ -1276,7 +1321,9 @@ export const NucleusVisualization = forwardRef<NucleusVisualizationHandle, Nucle
 
     // Cleanup
     return () => {
-      window.removeEventListener('resize', handleResize)
+      window.removeEventListener('resize', markResizeDirty)
+      resizeObserver.disconnect()
+      canvas.removeEventListener('mousedown', onMouseDown)
       canvas.removeEventListener('click', onClick)
 
       if (animationIdRef.current) {

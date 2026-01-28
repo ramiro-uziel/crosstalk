@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, forwardRef } from 'react'
 import { Send, X, RotateCcw } from 'lucide-react'
 import type { ChatMessage } from '../types/chat'
 
@@ -6,9 +6,10 @@ interface NucleusChatProps {
   nucleusName: string
   isOpen: boolean
   onClose: () => void
+  sidebarCollapsed?: boolean
 }
 
-export function NucleusChat({ nucleusName, isOpen, onClose }: NucleusChatProps) {
+export const NucleusChat = forwardRef<HTMLDivElement, NucleusChatProps>(function NucleusChat({ nucleusName, isOpen, onClose, sidebarCollapsed }, ref) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -111,7 +112,7 @@ export function NucleusChat({ nucleusName, isOpen, onClose }: NucleusChatProps) 
   if (!isOpen) return null
 
   return (
-    <div className="nucleus-chat-popup">
+    <div ref={ref} className="nucleus-chat-popup" style={sidebarCollapsed ? { right: '40px' } : undefined}>
       {/* Scanline overlay */}
       <div className="nucleus-chat-scanlines" />
 
@@ -184,4 +185,4 @@ export function NucleusChat({ nucleusName, isOpen, onClose }: NucleusChatProps) 
       </div>
     </div>
   )
-}
+})

@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { Music, Sparkles, Plus, Trash2, ChevronDown, ChevronUp, Pause, Play, Volume2, X } from 'lucide-react'
+import { Music, Sparkles, Plus, Trash2, ChevronDown, ChevronUp, Pause, Play, Volume2, X, PanelRightOpen, PanelRightClose } from 'lucide-react'
 import { NucleusVisualization } from '../components/NucleusVisualization'
 import type { NucleusVisualizationHandle } from '../components/NucleusVisualization'
 import { NucleusChat } from '../components/NucleusChat'
@@ -55,14 +55,19 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [nucleusName, setNucleusName] = useState('The Nucleus')
   const [isChatOpen, setIsChatOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null)
   const [selectedOrbit, setSelectedOrbit] = useState<number | null>(null)
   const [trackScreenPos, setTrackScreenPos] = useState<{ x: number; y: number } | null>(null)
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null)
   const [isTooltipReady, setIsTooltipReady] = useState(false)
+  const [nucleusScreenPos, setNucleusScreenPos] = useState<{ x: number; y: number } | null>(null)
+  const [nucleusChatPosition, setNucleusChatPosition] = useState<{ x: number; y: number } | null>(null)
+  const [isNucleusChatReady, setIsNucleusChatReady] = useState(false)
 
   const visualizationRef = useRef<NucleusVisualizationHandle>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
+  const nucleusChatRef = useRef<HTMLDivElement>(null)
 
   // YouTube audio playback state
   const [playingTrack, setPlayingTrack] = useState<Track | null>(null)
@@ -306,6 +311,67 @@ function App() {
     }
   }, [selectedTrack])
 
+  // Track nucleus screen position when chat is open
+  useEffect(() => {
+    if (!isChatOpen) {
+      setNucleusScreenPos(null)
+      return
+    }
+
+    let animationFrameId: number
+
+    const updatePosition = () => {
+      if (visualizationRef.current) {
+        const pos = visualizationRef.current.getNucleusScreenPosition()
+        setNucleusScreenPos(pos)
+      }
+      animationFrameId = requestAnimationFrame(updatePosition)
+    }
+
+    updatePosition()
+
+    return () => {
+      cancelAnimationFrame(animationFrameId)
+    }
+  }, [isChatOpen])
+
+  // Track the nucleus chat popup position
+  useEffect(() => {
+    if (!isChatOpen) {
+      setIsNucleusChatReady(false)
+      setNucleusChatPosition(null)
+      return
+    }
+
+    const timeoutId = setTimeout(() => {
+      if (nucleusChatRef.current) {
+        const rect = nucleusChatRef.current.getBoundingClientRect()
+        setNucleusChatPosition({
+          x: rect.left,
+          y: rect.top + rect.height / 2,
+        })
+        setIsNucleusChatReady(true)
+      }
+    }, 50)
+
+    const updateChatPosition = () => {
+      if (nucleusChatRef.current) {
+        const rect = nucleusChatRef.current.getBoundingClientRect()
+        setNucleusChatPosition({
+          x: rect.left,
+          y: rect.top + rect.height / 2,
+        })
+      }
+    }
+
+    window.addEventListener('resize', updateChatPosition)
+
+    return () => {
+      clearTimeout(timeoutId)
+      window.removeEventListener('resize', updateChatPosition)
+    }
+  }, [isChatOpen])
+
   // Track card expansion state
   const [expandedTracks, setExpandedTracks] = useState<Set<number>>(new Set())
 
@@ -415,6 +481,9 @@ function App() {
       setSelectedOrbit(orbitInfo.orbitIndex)
     } else {
       setSelectedOrbit(null)
+      setSelectedTrack(null)
+      setShowSwitchConfirm(false)
+      setIsChatOpen(false)
     }
   }
 
@@ -471,14 +540,34 @@ function App() {
 
   return (
     <div className="nucleus-container">
+      {/* Sidebar toggle button */}
+      <button
+        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+        className="fixed top-4 right-4 z-50 w-8 h-8 flex items-center justify-center bg-black/80 border border-white/30 text-white/60 hover:text-white hover:border-white/60 transition-all"
+        style={{ right: sidebarCollapsed ? 16 : `calc(320px + 16px)` }}
+        title={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+      >
+        {sidebarCollapsed ? <PanelRightOpen className="w-4 h-4" /> : <PanelRightClose className="w-4 h-4" />}
+      </button>
+
       {/* Visualization takes full screen minus sidebar width */}
-      <div className="fixed inset-0 right-80">
+      <div className={`fixed inset-0 transition-[right] duration-300 ${sidebarCollapsed ? 'right-0' : 'right-80'}`}>
         <NucleusVisualization
           ref={visualizationRef}
           tracks={tracks}
           onOrbitClick={handleOrbitClick}
           onTrackClick={handleTrackClick}
-          onNucleusClick={() => setIsChatOpen(!isChatOpen)}
+          onNucleusClick={() => {
+            const nextOpen = !isChatOpen
+            setIsChatOpen(nextOpen)
+            if (nextOpen) {
+              setSelectedTrack(null)
+              setShowSwitchConfirm(false)
+              visualizationRef.current?.zoomToNucleus()
+            } else {
+              visualizationRef.current?.resetCamera()
+            }
+          }}
           isAudioPlaying={isPlaying}
           audioEnergy={playingTrack?.energy ?? undefined}
           audioTempo={playingTrack?.tempo ?? undefined}
@@ -486,7 +575,7 @@ function App() {
       </div>
 
       {/* Sidebar */}
-      <div className="fixed right-0 top-0 w-80 h-screen bg-black border-l border-white/20 overflow-y-auto z-40">
+      <div className={`fixed top-0 w-80 h-screen bg-black border-l border-white/20 overflow-y-auto z-40 transition-[right] duration-300 ${sidebarCollapsed ? '-right-80' : 'right-0'}`}>
         <div className="pb-4 px-4 pt-4">
           {/* Add Track Input */}
           <div className="mb-4">
@@ -703,9 +792,110 @@ function App() {
         </svg>
       )}
 
+      {/* SVG overlay for nucleus chat pointer line */}
+      {isChatOpen && nucleusScreenPos && nucleusChatPosition && isNucleusChatReady && (
+        <svg
+          className="fixed inset-0 pointer-events-none z-[999]"
+          style={{
+            width: '100vw',
+            height: '100vh',
+            opacity: 1,
+            transition: 'opacity 0.2s ease-in'
+          }}
+        >
+          <defs>
+            <linearGradient id="nucleusLineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="rgba(255, 255, 255, 0.2)" />
+              <stop offset="50%" stopColor="rgba(255, 255, 255, 0.4)" />
+              <stop offset="100%" stopColor="rgba(255, 255, 255, 0.7)" />
+              <animate attributeName="x1" values="0%;20%;0%" dur="3s" repeatCount="indefinite" />
+            </linearGradient>
+          </defs>
+          {/* Line from chat popup to nucleus */}
+          <line
+            x1={nucleusChatPosition.x}
+            y1={nucleusChatPosition.y}
+            x2={nucleusScreenPos.x}
+            y2={nucleusScreenPos.y}
+            stroke="url(#nucleusLineGradient)"
+            strokeWidth="1.5"
+            strokeDasharray="5 3"
+            opacity="0.7"
+          >
+            <animate
+              attributeName="stroke-dashoffset"
+              from="0"
+              to="16"
+              dur="1s"
+              repeatCount="indefinite"
+            />
+          </line>
+          {/* Glow line underneath */}
+          <line
+            x1={nucleusChatPosition.x}
+            y1={nucleusChatPosition.y}
+            x2={nucleusScreenPos.x}
+            y2={nucleusScreenPos.y}
+            stroke="rgba(255, 255, 255, 0.2)"
+            strokeWidth="3"
+            opacity="0.3"
+            style={{ filter: 'blur(2px)' }}
+          />
+          {/* Pulsing dot at nucleus position */}
+          <circle
+            cx={nucleusScreenPos.x}
+            cy={nucleusScreenPos.y}
+            r="4"
+            fill="white"
+            opacity="0.9"
+            style={{
+              filter: 'drop-shadow(0 0 6px rgba(255, 255, 255, 0.9))',
+            }}
+          >
+            <animate
+              attributeName="r"
+              values="4;5;4"
+              dur="2s"
+              repeatCount="indefinite"
+            />
+          </circle>
+          {/* Outer ring at nucleus */}
+          <circle
+            cx={nucleusScreenPos.x}
+            cy={nucleusScreenPos.y}
+            r="8"
+            fill="none"
+            stroke="white"
+            strokeWidth="1"
+            opacity="0.3"
+          >
+            <animate
+              attributeName="r"
+              values="8;12;8"
+              dur="2s"
+              repeatCount="indefinite"
+            />
+            <animate
+              attributeName="opacity"
+              values="0.3;0.1;0.3"
+              dur="2s"
+              repeatCount="indefinite"
+            />
+          </circle>
+          {/* Dot at chat popup connection */}
+          <circle
+            cx={nucleusChatPosition.x}
+            cy={nucleusChatPosition.y}
+            r="3"
+            fill="white"
+            opacity="0.7"
+          />
+        </svg>
+      )}
+
       {/* Track tooltip */}
       {selectedTrack && (
-        <div ref={tooltipRef} className="track-tooltip">
+        <div ref={tooltipRef} className="track-tooltip" style={sidebarCollapsed ? { right: '40px' } : undefined}>
           <div className="tooltip-header">
             <div className="tooltip-icon" />
             <h3 className="tooltip-title">{selectedTrack.title}</h3>
@@ -752,7 +942,7 @@ function App() {
 
       {/* Audio player bar */}
       {(playingTrack || isLoadingVideo) && (
-        <div className="fixed bottom-0 left-0 right-80 z-50 bg-black/95 backdrop-blur-sm border-t border-white/20 font-mono">
+        <div className={`fixed bottom-0 left-0 z-50 bg-black/95 backdrop-blur-sm border-t border-white/20 font-mono transition-[right] duration-300 ${sidebarCollapsed ? 'right-0' : 'right-80'}`}>
           {/* Seek bar */}
           {seekDuration > 0 && (
             <div className="px-4 pt-2 flex items-center gap-2">
@@ -812,9 +1002,14 @@ function App() {
 
       {/* Nucleus Chat */}
       <NucleusChat
+        ref={nucleusChatRef}
         nucleusName={nucleusName}
         isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
+        onClose={() => {
+          setIsChatOpen(false)
+          visualizationRef.current?.resetCamera()
+        }}
+        sidebarCollapsed={sidebarCollapsed}
       />
     </div>
   )
