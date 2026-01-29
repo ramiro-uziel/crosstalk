@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { extractSpotifyPlaylistId, fetchPlaylistTracks } from '../../../lib/spotify'
-import { analyzeLyrics } from '../../../lib/gemini'
+import { analyzeLyricsWithRotation } from '../../../lib/gemini'
 import { searchGeniusLyrics } from '../../../lib/genius'
 import { trackQueries } from '../../../lib/database'
 import type { Track } from '../../../types/track'
@@ -14,15 +14,26 @@ export const Route = createFileRoute('/api/tracks/analyze-playlist')({
 
           const clientId = process.env.VITE_SPOTIFY_CLIENT_ID
           const clientSecret = process.env.VITE_SPOTIFY_CLIENT_SECRET
-          const geminiApiKey = process.env.VITE_GEMINI_API_KEY
           const geniusToken = process.env.VITE_GENIUS_ACCESS_TOKEN
 
-          if (!clientId || !clientSecret || !geminiApiKey) {
+          // Load all available Gemini API keys
+          const geminiApiKeys = [
+            process.env.VITE_GEMINI_API_KEY_1,
+            process.env.VITE_GEMINI_API_KEY_2,
+            process.env.VITE_GEMINI_API_KEY_3,
+            process.env.VITE_GEMINI_API_KEY_4,
+            process.env.VITE_GEMINI_API_KEY_5,
+            process.env.VITE_GEMINI_API_KEY_6,
+          ].filter((key): key is string => !!key)
+
+          if (!clientId || !clientSecret || geminiApiKeys.length === 0) {
             return new Response(
               JSON.stringify({ error: 'Missing API credentials' }),
               { status: 500, headers: { 'Content-Type': 'application/json' } }
             )
           }
+
+          console.log(`🔑 Loaded ${geminiApiKeys.length} Gemini API keys for rotation`)
 
           const playlistId = extractSpotifyPlaylistId(spotifyUrl)
           if (!playlistId) {
@@ -32,8 +43,11 @@ export const Route = createFileRoute('/api/tracks/analyze-playlist')({
             )
           }
 
-          // Fetch up to 25 tracks from playlist
-          const playlistTracks = await fetchPlaylistTracks(playlistId, clientId, clientSecret, 25)
+          // Fetch more tracks than needed to account for failures/duplicates
+          const TARGET_SUCCESS = 25
+          console.log(`📥 Fetching playlist tracks (ID: ${playlistId})...`)
+          const playlistTracks = await fetchPlaylistTracks(playlistId, clientId, clientSecret, 100)
+          console.log(`✓ Retrieved ${playlistTracks.length} tracks from playlist`)
 
           const results: {
             success: Track[]
@@ -45,17 +59,30 @@ export const Route = createFileRoute('/api/tracks/analyze-playlist')({
             skipped: [],
           }
 
-          // Process each track sequentially
-          for (const metadata of playlistTracks) {
+          console.log(`🎯 Target: ${TARGET_SUCCESS} successful additions\n`)
+
+          // Process each track sequentially until we reach target
+          for (let i = 0; i < playlistTracks.length; i++) {
+            const metadata = playlistTracks[i]
+
+            // Stop if we've reached the target number of successful additions
+            if (results.success.length >= TARGET_SUCCESS) {
+              console.log(`✅ Reached target of ${TARGET_SUCCESS} tracks!`)
+              break
+            }
+
             const trackName = metadata.name
             const artistName = metadata.artists[0]?.name || 'Unknown Artist'
             const spotifyId = metadata.id
             const trackUrl = metadata.external_urls?.spotify || `https://open.spotify.com/track/${spotifyId}`
 
+            console.log(`\n[${i + 1}/${playlistTracks.length}] Processing: "${trackName}" by ${artistName}`)
+
             try {
               // Check if track already exists
               const existing = trackQueries.getBySpotifyId.get(spotifyId) as Track | undefined
               if (existing) {
+                console.log(`  ⏭️  Skipped - already in collection`)
                 results.skipped.push({
                   track: trackName,
                   artist: artistName,
@@ -70,6 +97,7 @@ export const Route = createFileRoute('/api/tracks/analyze-playlist')({
 
               if (geniusToken) {
                 try {
+                  console.log(`  🔍 Searching lyrics on Genius...`)
                   const lyricsResult = await searchGeniusLyrics(
                     trackName,
                     artistName,
@@ -77,8 +105,10 @@ export const Route = createFileRoute('/api/tracks/analyze-playlist')({
                   )
                   lyrics = lyricsResult.lyrics
                   geniusUrl = lyricsResult.url
+                  console.log(`  ✓ Lyrics found (${lyrics?.length || 0} characters)`)
                 } catch (error) {
                   // Lyrics not found - skip this track
+                  console.log(`  ✗ No lyrics found`)
                   results.failed.push({
                     track: trackName,
                     artist: artistName,
@@ -89,6 +119,7 @@ export const Route = createFileRoute('/api/tracks/analyze-playlist')({
               }
 
               if (!lyrics) {
+                console.log(`  ✗ No lyrics available`)
                 results.failed.push({
                   track: trackName,
                   artist: artistName,
@@ -97,17 +128,20 @@ export const Route = createFileRoute('/api/tracks/analyze-playlist')({
                 continue
               }
 
-              // Analyze lyrics
-              const analysis = await analyzeLyrics(
+              // Analyze lyrics with API key rotation
+              console.log(`  🤖 Analyzing with Gemini AI...`)
+              const analysis = await analyzeLyricsWithRotation(
                 lyrics,
                 trackName,
                 artistName,
-                geminiApiKey
+                geminiApiKeys
               )
+              console.log(`  ✓ Analysis complete - Emotion: ${analysis.emotion}`)
 
               const thumbnailUrl = metadata.album.images[0]?.url || null
 
               // Insert into database
+              console.log(`  💾 Saving to database...`)
               const result = trackQueries.insert.run(
                 spotifyId,
                 trackUrl,
@@ -131,8 +165,10 @@ export const Route = createFileRoute('/api/tracks/analyze-playlist')({
 
               const track = trackQueries.getById.get(result.lastInsertRowid) as Track
               results.success.push(track)
+              console.log(`  ✅ SUCCESS - Added to collection (${results.success.length}/${TARGET_SUCCESS})`)
 
             } catch (error) {
+              console.log(`  ❌ FAILED - ${error instanceof Error ? error.message : 'Unknown error'}`)
               results.failed.push({
                 track: trackName,
                 artist: artistName,
@@ -140,6 +176,14 @@ export const Route = createFileRoute('/api/tracks/analyze-playlist')({
               })
             }
           }
+
+          console.log(`\n${'='.repeat(60)}`)
+          console.log(`📊 FINAL RESULTS:`)
+          console.log(`   ✅ Success: ${results.success.length}`)
+          console.log(`   ⏭️  Skipped: ${results.skipped.length}`)
+          console.log(`   ❌ Failed: ${results.failed.length}`)
+          console.log(`   📝 Total processed: ${results.success.length + results.skipped.length + results.failed.length}`)
+          console.log(`${'='.repeat(60)}\n`)
 
           return new Response(
             JSON.stringify({

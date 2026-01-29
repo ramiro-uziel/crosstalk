@@ -32,6 +32,9 @@ export interface SpotifyMetadata {
   album: {
     images: { url: string; height: number; width: number }[]
   }
+  external_urls?: {
+    spotify: string
+  }
 }
 
 export interface AnalysisResult {

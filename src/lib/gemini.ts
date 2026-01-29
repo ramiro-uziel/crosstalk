@@ -168,3 +168,34 @@ export async function analyzeLyrics(
   const analysis = JSON.parse(jsonMatch[0]) as AnalysisResult
   return analysis
 }
+
+// Analyze lyrics with automatic API key rotation
+export async function analyzeLyricsWithRotation(
+  lyrics: string,
+  title: string,
+  artist: string,
+  apiKeys: string[]
+): Promise<AnalysisResult> {
+  let lastError: Error | null = null
+
+  for (let i = 0; i < apiKeys.length; i++) {
+    try {
+      const result = await analyzeLyrics(lyrics, title, artist, apiKeys[i])
+      if (i > 0) {
+        console.log(`  ℹ️  Used API key ${i + 1} after ${i} failed attempt(s)`)
+      }
+      return result
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Unknown error')
+      console.log(`  ⚠️  API key ${i + 1} failed: ${lastError.message}`)
+
+      // If this wasn't the last key, try the next one
+      if (i < apiKeys.length - 1) {
+        console.log(`  🔄 Trying next API key...`)
+      }
+    }
+  }
+
+  // All keys failed
+  throw new Error(`All ${apiKeys.length} Gemini API keys failed. Last error: ${lastError?.message}`)
+}

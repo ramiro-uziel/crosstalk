@@ -431,12 +431,36 @@ function App() {
 
     try {
       if (isPlaylist) {
-        // Handle playlist
+        // Handle playlist with incremental updates
+        const initialTrackCount = tracks.length
+
+        // Set up polling to refresh tracks while processing
+        setPlaylistProgress({ current: 0, total: 25, isProcessing: true })
+
+        const pollInterval = setInterval(async () => {
+          try {
+            const response = await fetch('/api/tracks')
+            const data = await response.json()
+            if (data.tracks) {
+              setTracks(data.tracks)
+              const newCount = data.tracks.length - initialTrackCount
+              if (newCount > 0) {
+                setPlaylistProgress(prev => prev ? { ...prev, current: newCount } : null)
+              }
+            }
+          } catch (err) {
+            console.error('Failed to poll tracks:', err)
+          }
+        }, 2000) // Poll every 2 seconds
+
+        // Start playlist analysis
         const response = await fetch('/api/tracks/analyze-playlist', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ spotifyUrl: url }),
         })
+
+        clearInterval(pollInterval)
 
         const data = await response.json()
 
@@ -444,10 +468,8 @@ function App() {
           throw new Error(data.error || 'Failed to analyze playlist')
         }
 
-        // Add all successful tracks
-        if (data.tracks && data.tracks.length > 0) {
-          setTracks(prev => [...data.tracks, ...prev])
-        }
+        // Final refresh to ensure we have all tracks
+        await loadTracks()
 
         // Show summary
         const summary: string[] = []
@@ -650,6 +672,20 @@ function App() {
                 {isAnalyzing ? '...' : 'Add'}
               </button>
             </div>
+            {playlistProgress && playlistProgress.isProcessing && (
+              <div className="mt-2 border border-white/30 bg-black/50 p-2">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-white text-xs font-mono">Processing playlist...</span>
+                  <span className="text-white text-xs font-mono">{playlistProgress.current}/{playlistProgress.total}</span>
+                </div>
+                <div className="w-full h-1 bg-white/20 overflow-hidden">
+                  <div
+                    className="h-full bg-white transition-all duration-300"
+                    style={{ width: `${(playlistProgress.current / playlistProgress.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
             {error && (
               <div className="mt-2 text-white text-xs font-mono border border-white/50 bg-white/10 p-2">
                 {error}
@@ -1078,7 +1114,7 @@ interface TrackCardProps {
 function TrackCard({ track, isExpanded, onToggleExpand, onDelete, isSelected }: TrackCardProps) {
   return (
     <div
-      className={`bg-black border border-white/20 p-3 transition-colors group font-mono ${
+      className={`bg-black border border-white/20 p-3 transition-colors group font-mono track-card-enter ${
         isSelected ? 'border-white' : 'hover:border-white/50'
       }`}
     >

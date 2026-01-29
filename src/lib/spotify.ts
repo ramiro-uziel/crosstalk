@@ -25,7 +25,7 @@ async function getAccessToken(clientId: string, clientSecret: string): Promise<s
   accessToken = data.access_token
   tokenExpiry = Date.now() + (data.expires_in * 1000) - 60000
 
-  return accessToken
+  return accessToken as string
 }
 
 export function extractSpotifyTrackId(url: string): string | null {
@@ -65,29 +65,48 @@ export async function fetchPlaylistTracks(
   playlistId: string,
   clientId: string,
   clientSecret: string,
-  limit: number = 25
+  maxTracks: number = 100
 ): Promise<SpotifyMetadata[]> {
   const token = await getAccessToken(clientId, clientSecret)
+  const allTracks: SpotifyMetadata[] = []
+  let offset = 0
+  const batchSize = 50 // Spotify max per request
 
-  const response = await fetch(
-    `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=${limit}`,
-    {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
+  while (allTracks.length < maxTracks) {
+    const response = await fetch(
+      `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=${batchSize}&offset=${offset}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      }
+    )
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch playlist tracks: ${response.statusText}`)
     }
-  )
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch playlist tracks: ${response.statusText}`)
+    const data = await response.json()
+
+    const tracks = data.items
+      .filter((item: any) => item.track !== null)
+      .map((item: any) => item.track as SpotifyMetadata)
+
+    if (tracks.length === 0) {
+      break // No more tracks in playlist
+    }
+
+    allTracks.push(...tracks)
+
+    // If we got fewer tracks than requested, we've reached the end
+    if (data.items.length < batchSize) {
+      break
+    }
+
+    offset += batchSize
   }
 
-  const data = await response.json()
-
-  // Extract track metadata from playlist response
-  return data.items
-    .filter((item: any) => item.track !== null)
-    .map((item: any) => item.track as SpotifyMetadata)
+  return allTracks.slice(0, maxTracks)
 }
 
 export async function downloadPreviewMp3(previewUrl: string): Promise<Buffer> {
