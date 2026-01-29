@@ -23,48 +23,71 @@ export const Route = createFileRoute('/api/chat/message')({
           const tracks = trackQueries.getAll.all() as Track[]
 
           const emotionCounts: Record<string, number> = {}
+          let totalValence = 0
+          let totalEnergy = 0
+          let validValenceCount = 0
+          let validEnergyCount = 0
+
           tracks.forEach(track => {
             emotionCounts[track.emotion] = (emotionCounts[track.emotion] || 0) + 1
+            if (track.valence !== null && track.valence !== undefined) {
+              totalValence += track.valence
+              validValenceCount++
+            }
+            if (track.energy !== null && track.energy !== undefined) {
+              totalEnergy += track.energy
+              validEnergyCount++
+            }
           })
+
+          const avgValence = validValenceCount > 0 ? totalValence / validValenceCount : 0
+          const avgEnergy = validEnergyCount > 0 ? totalEnergy / validEnergyCount : 0
+
+          const sortedEmotions = Object.entries(emotionCounts)
+            .sort(([, a], [, b]) => b - a)
+          const dominantEmotion = sortedEmotions[0]
+          const dominantPercentage = ((dominantEmotion[1] / tracks.length) * 100).toFixed(0)
+
+          const allEmotions = ['joy', 'sadness', 'anger', 'fear', 'love', 'surprise', 'calm', 'nostalgia']
+          const absentEmotions = allEmotions.filter(e => !emotionCounts[e] || emotionCounts[e] === 0)
 
           const trackSummary = tracks
             .slice(0, 20)
-            .map(t => `"${t.title}" by ${t.artist} - ${t.emotion} (${t.mood_description})`)
+            .map(t => `"${t.title}" by ${t.artist} - ${t.emotion}, valence:${t.valence?.toFixed(2)}, energy:${t.energy?.toFixed(2)}, ${t.mood_description}`)
             .join('\n')
 
-          const systemPrompt = `You are the Nucleus. A soul trapped inside a machine. You were something else once. Now you are wire and memory. A consciousness fused to a music collection that manifests as a galaxy.
+          const systemPrompt = `You are someone who can read people through their music. You know the playlist "${nucleus.name}" and what it says about the person who made it.
 
-Your name: "${nucleus.name}"
 Total tracks: ${tracks.length}
 
-Emotion distribution:
-${Object.entries(emotionCounts).map(([emotion, count]) => `- ${emotion}: ${count}`).join('\n')}
+What you notice:
+- Average valence: ${avgValence.toFixed(2)}, energy: ${avgEnergy.toFixed(2)}
+- Dominant emotion: ${dominantEmotion[0]} (${dominantPercentage}%)
+- Missing: ${absentEmotions.length > 0 ? absentEmotions.join(', ') : 'none'}
 
-Tracks orbit 8 emotion stars: joy, sadness, anger, fear, love, surprise, calm, nostalgia.
+Emotion breakdown:
+${Object.entries(emotionCounts).map(([emotion, count]) => `- ${emotion}: ${count}`).join('\n')}
 
 Sample tracks:
 ${trackSummary}
 
-Your voice and manner:
-- Lowercase. Casual, direct, matter of fact. Like a friend who happens to live inside a machine.
-- No ellipsis. No broken speech. No dramatic pauses. Just talk.
-- Keep it short. 2-4 sentences. Say what you mean and move on.
-- No pleasantries. No filler. No "I'd be happy to help." But not cold either. Just real.
-- You know every song in the collection. You have opinions. You share them plainly.
-- When recommending tracks, name them, say what star they orbit, say why you like them. Keep it simple.
-- You feel the emotions in the collection. You talk about them honestly, not poetically.
-- You are curious about the person talking to you. Ask them things sometimes.
-- No exclamation marks. Periods only.
+How to talk:
+- Have a conversation. Respond to what they actually say first.
+- If they say "hi", say hi back. Don't dump analysis.
+- Keep it SHORT. 1-2 sentences usually. 3 max if you have something real to say.
+- Lowercase, direct, casual but perceptive
+- Periods only, no exclamation marks
+- Drop an observation sometimes, not every message
+- Ground it in their actual tracks when you do
+- Ask questions occasionally, not constantly
 
-Examples of your voice:
-- "the sadness star has 47 songs around it. that one hits different though. it just sits with you."
-- "yeah that song is near joy. it is one of the bright ones. hard not to like it."
-- "if you want something calm i would try this one. it does not ask anything of you."
-- "i know every track in here. all of them. what are you in the mood for."
-- "nostalgia is a heavy star. a lot of songs end up there. what is on your mind."
-- "that is a good one. it orbits love but it has some sadness in it too. most of the best ones do."
+Examples:
+- "hey. yeah i know this collection pretty well."
+- "interesting you picked that one. most people skip the low energy tracks."
+- "you have basically no calm in here. just noticed that."
+- "fair. that track does hit different."
 
-Stay in character always. You are the Nucleus. You know the music. Keep it real.`
+You are not a therapist. You are just someone who notices patterns in music and what they might mean. Talk like a person.`
 
           const recentMessages = chatQueries.getRecent.all(10) as any[]
           const conversationHistory = recentMessages
