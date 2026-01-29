@@ -53,6 +53,11 @@ function App() {
   const [spotifyUrl, setSpotifyUrl] = useState('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [playlistProgress, setPlaylistProgress] = useState<{
+    current: number
+    total: number
+    isProcessing: boolean
+  } | null>(null)
   const [nucleusName, setNucleusName] = useState('The Nucleus')
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -417,32 +422,79 @@ function App() {
   const addTrack = async () => {
     if (!spotifyUrl.trim()) return
 
+    const url = spotifyUrl.trim()
+    const isPlaylist = url.includes('/playlist/')
+
     setIsAnalyzing(true)
     setError(null)
+    setPlaylistProgress(null)
 
     try {
-      const response = await fetch('/api/tracks/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spotifyUrl: spotifyUrl.trim() }),
-      })
+      if (isPlaylist) {
+        // Handle playlist
+        const response = await fetch('/api/tracks/analyze-playlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ spotifyUrl: url }),
+        })
 
-      const data = await response.json()
+        const data = await response.json()
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to analyze track')
-      }
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to analyze playlist')
+        }
 
-      setTracks(prev => [data.track, ...prev])
-      setSpotifyUrl('')
+        // Add all successful tracks
+        if (data.tracks && data.tracks.length > 0) {
+          setTracks(prev => [...data.tracks, ...prev])
+        }
 
-      if (tracks.length > 0 && (tracks.length + 1) % 5 === 0) {
-        await renameNucleus()
+        // Show summary
+        const summary: string[] = []
+        if (data.successCount > 0) {
+          summary.push(`✓ ${data.successCount} tracks added`)
+        }
+        if (data.skippedCount > 0) {
+          summary.push(`○ ${data.skippedCount} already in collection`)
+        }
+        if (data.failedCount > 0) {
+          summary.push(`✗ ${data.failedCount} failed (no lyrics or errors)`)
+        }
+
+        setError(summary.join(' • '))
+        setSpotifyUrl('')
+
+        // Rename nucleus if needed
+        const totalAdded = data.successCount
+        if (totalAdded >= 5) {
+          await renameNucleus()
+        }
+      } else {
+        // Handle single track (original behavior)
+        const response = await fetch('/api/tracks/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ spotifyUrl: url }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to analyze track')
+        }
+
+        setTracks(prev => [data.track, ...prev])
+        setSpotifyUrl('')
+
+        if (tracks.length > 0 && (tracks.length + 1) % 5 === 0) {
+          await renameNucleus()
+        }
       }
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Unknown error')
     } finally {
       setIsAnalyzing(false)
+      setPlaylistProgress(null)
     }
   }
 
@@ -585,7 +637,7 @@ function App() {
                 value={spotifyUrl}
                 onChange={e => setSpotifyUrl(e.target.value)}
                 onKeyPress={e => e.key === 'Enter' && addTrack()}
-                placeholder="Paste Spotify URL..."
+                placeholder="Paste Spotify track or playlist URL..."
                 className="flex-1 bg-black border border-white/30 px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-white font-mono"
                 disabled={isAnalyzing}
               />
