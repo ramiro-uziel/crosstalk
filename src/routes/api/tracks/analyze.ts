@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { extractSpotifyTrackId, fetchSpotifyMetadata } from '../../../lib/spotify'
-import { analyzeLyrics } from '../../../lib/gemini'
+import { analyzeLyricsWithRotation, getGeminiApiKeys } from '../../../lib/gemini'
 import { searchGeniusLyrics } from '../../../lib/genius'
 import { trackQueries } from '../../../lib/database'
 import type { Track } from '../../../types/track'
@@ -14,10 +14,10 @@ export const Route = createFileRoute('/api/tracks/analyze')({
 
           const clientId = process.env.VITE_SPOTIFY_CLIENT_ID
           const clientSecret = process.env.VITE_SPOTIFY_CLIENT_SECRET
-          const geminiApiKey = process.env.VITE_GEMINI_API_KEY
+          const geminiApiKeys = getGeminiApiKeys()
           const geniusToken = process.env.VITE_GENIUS_ACCESS_TOKEN
 
-          if (!clientId || !clientSecret || !geminiApiKey) {
+          if (!clientId || !clientSecret || geminiApiKeys.length === 0) {
             return new Response(
               JSON.stringify({ error: 'Missing API credentials' }),
               { status: 500, headers: { 'Content-Type': 'application/json' } }
@@ -66,12 +66,12 @@ export const Route = createFileRoute('/api/tracks/analyze')({
             )
           }
 
-          // Step 4: Analyze lyrics with Gemini
-          const analysis = await analyzeLyrics(
+          // Step 4: Analyze lyrics with Gemini (with API key rotation)
+          const analysis = await analyzeLyricsWithRotation(
             lyrics,
             metadata.name,
             metadata.artists[0]?.name || '',
-            geminiApiKey
+            geminiApiKeys
           )
 
           const thumbnailUrl = metadata.album.images[0]?.url || null

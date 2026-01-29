@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { GoogleGenAI } from '@google/genai'
+import { chatWithRotation, getGeminiApiKeys } from '../../../lib/gemini'
 import { trackQueries, chatQueries, nucleusQueries } from '../../../lib/database'
 import type { Track } from '../../../types/track'
 import type { NucleusMetadata } from '../../../types/chat'
@@ -10,11 +10,11 @@ export const Route = createFileRoute('/api/chat/message')({
       POST: async ({ request }) => {
         try {
           const { message } = await request.json()
-          const geminiApiKey = process.env.GEMINI_API_KEY
+          const geminiApiKeys = getGeminiApiKeys()
 
-          if (!geminiApiKey) {
+          if (geminiApiKeys.length === 0) {
             return new Response(
-              JSON.stringify({ error: 'Gemini API key not configured' }),
+              JSON.stringify({ error: 'No Gemini API keys configured' }),
               { status: 500, headers: { 'Content-Type': 'application/json' } }
             )
           }
@@ -74,18 +74,14 @@ Stay in character always. You are the Nucleus. You know the music. Keep it real.
               parts: [{ text: msg.content }],
             }))
 
-          const ai = new GoogleGenAI({ apiKey: geminiApiKey })
-
-          const result = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: [
+          const response = await chatWithRotation(
+            geminiApiKeys,
+            [
               { role: 'user', parts: [{ text: systemPrompt }] },
               ...conversationHistory,
               { role: 'user', parts: [{ text: message }] },
-            ],
-          })
-
-          const response = result.text
+            ]
+          )
 
           chatQueries.insert.run('user', message, nucleus.name)
           chatQueries.insert.run('assistant', response, nucleus.name)

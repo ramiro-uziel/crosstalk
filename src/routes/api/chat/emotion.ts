@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { GoogleGenAI } from '@google/genai'
+import { chatWithRotation, getGeminiApiKeys } from '../../../lib/gemini'
 import { chatQueries, trackQueries } from '../../../lib/database'
 import type { ChatMessage } from '../../../types/chat'
 import type { Track } from '../../../types/track'
@@ -101,10 +101,10 @@ export const Route = createFileRoute('/api/chat/emotion')({
             )
           }
 
-          const geminiApiKey = process.env.GEMINI_API_KEY
-          if (!geminiApiKey) {
+          const geminiApiKeys = getGeminiApiKeys()
+          if (geminiApiKeys.length === 0) {
             return new Response(
-              JSON.stringify({ error: 'Missing Gemini API key' }),
+              JSON.stringify({ error: 'No Gemini API keys configured' }),
               { status: 500, headers: { 'Content-Type': 'application/json' } }
             )
           }
@@ -117,7 +117,6 @@ export const Route = createFileRoute('/api/chat/emotion')({
           const chatHistory = recentMessages.reverse()
 
           // Build conversation
-          const ai = new GoogleGenAI({ apiKey: geminiApiKey })
           const systemPrompt = buildSystemPrompt(emotion, tracks)
 
           const contents: Array<{ role: string; parts: Array<{ text: string }> }> = []
@@ -136,13 +135,11 @@ export const Route = createFileRoute('/api/chat/emotion')({
             parts: [{ text: message }],
           })
 
-          const result = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            systemInstruction: systemPrompt,
+          const response = await chatWithRotation(
+            geminiApiKeys,
             contents,
-          })
-
-          const response = result.text
+            systemPrompt
+          )
 
           // Save user message
           chatQueries.insertWithEmotion.run('user', message, null, emotion)

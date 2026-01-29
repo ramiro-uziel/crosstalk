@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { extractSpotifyPlaylistId, fetchPlaylistTracks } from '../../../lib/spotify'
-import { analyzeLyricsWithRotation } from '../../../lib/gemini'
+import { analyzeLyricsWithRotation, getGeminiApiKeys } from '../../../lib/gemini'
 import { searchGeniusLyrics } from '../../../lib/genius'
 import { trackQueries } from '../../../lib/database'
 import type { Track } from '../../../types/track'
@@ -15,16 +15,7 @@ export const Route = createFileRoute('/api/tracks/analyze-playlist')({
           const clientId = process.env.VITE_SPOTIFY_CLIENT_ID
           const clientSecret = process.env.VITE_SPOTIFY_CLIENT_SECRET
           const geniusToken = process.env.VITE_GENIUS_ACCESS_TOKEN
-
-          // Load all available Gemini API keys
-          const geminiApiKeys = [
-            process.env.VITE_GEMINI_API_KEY_1,
-            process.env.VITE_GEMINI_API_KEY_2,
-            process.env.VITE_GEMINI_API_KEY_3,
-            process.env.VITE_GEMINI_API_KEY_4,
-            process.env.VITE_GEMINI_API_KEY_5,
-            process.env.VITE_GEMINI_API_KEY_6,
-          ].filter((key): key is string => !!key)
+          const geminiApiKeys = getGeminiApiKeys()
 
           if (!clientId || !clientSecret || geminiApiKeys.length === 0) {
             return new Response(

@@ -1,6 +1,45 @@
 import { GoogleGenAI } from '@google/genai'
 import type { AnalysisResult, Emotion } from '../types/track'
 
+// Get all available Gemini API keys from environment
+export function getGeminiApiKeys(): string[] {
+  return [
+    process.env.VITE_GEMINI_API_KEY_1,
+    process.env.VITE_GEMINI_API_KEY_2,
+    process.env.VITE_GEMINI_API_KEY_3,
+    process.env.VITE_GEMINI_API_KEY_4,
+    process.env.VITE_GEMINI_API_KEY_5,
+    process.env.VITE_GEMINI_API_KEY_6,
+  ].filter((key): key is string => !!key)
+}
+
+// Generic wrapper for API key rotation
+export async function withApiKeyRotation<T>(
+  apiKeys: string[],
+  operation: (apiKey: string) => Promise<T>
+): Promise<T> {
+  let lastError: Error | null = null
+
+  for (let i = 0; i < apiKeys.length; i++) {
+    try {
+      const result = await operation(apiKeys[i])
+      if (i > 0) {
+        console.log(`  ℹ️  Used API key ${i + 1} after ${i} failed attempt(s)`)
+      }
+      return result
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Unknown error')
+      console.log(`  ⚠️  API key ${i + 1} failed: ${lastError.message}`)
+
+      if (i < apiKeys.length - 1) {
+        console.log(`  🔄 Trying next API key...`)
+      }
+    }
+  }
+
+  throw new Error(`All ${apiKeys.length} Gemini API keys failed. Last error: ${lastError?.message}`)
+}
+
 const LYRICS_ANALYSIS_PROMPT = `Analyze these song lyrics and provide an emotional and stylistic analysis.
 
 Song: "{title}" by {artist}
@@ -176,26 +215,40 @@ export async function analyzeLyricsWithRotation(
   artist: string,
   apiKeys: string[]
 ): Promise<AnalysisResult> {
-  let lastError: Error | null = null
+  return withApiKeyRotation(apiKeys, (apiKey) =>
+    analyzeLyrics(lyrics, title, artist, apiKey)
+  )
+}
 
-  for (let i = 0; i < apiKeys.length; i++) {
-    try {
-      const result = await analyzeLyrics(lyrics, title, artist, apiKeys[i])
-      if (i > 0) {
-        console.log(`  ℹ️  Used API key ${i + 1} after ${i} failed attempt(s)`)
-      }
-      return result
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error('Unknown error')
-      console.log(`  ⚠️  API key ${i + 1} failed: ${lastError.message}`)
+// Generate nucleus name with API key rotation
+export async function generateNucleusNameWithRotation(
+  trackCount: number,
+  topEmotions: string[],
+  genres: string[],
+  moodDescriptions: string[],
+  apiKeys: string[]
+): Promise<string> {
+  return withApiKeyRotation(apiKeys, (apiKey) =>
+    generateNucleusName(trackCount, topEmotions, genres, moodDescriptions, apiKey)
+  )
+}
 
-      // If this wasn't the last key, try the next one
-      if (i < apiKeys.length - 1) {
-        console.log(`  🔄 Trying next API key...`)
-      }
+// Chat with Gemini using API key rotation
+export async function chatWithRotation(
+  apiKeys: string[],
+  contents: Array<{ role: string; parts: Array<{ text: string }> }>,
+  systemInstruction?: string
+): Promise<string> {
+  return withApiKeyRotation(apiKeys, async (apiKey) => {
+    const ai = new GoogleGenAI({ apiKey })
+    const result = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents,
+      ...(systemInstruction && { systemInstruction }),
+    })
+    if (!result.text) {
+      throw new Error('Empty response from Gemini')
     }
-  }
-
-  // All keys failed
-  throw new Error(`All ${apiKeys.length} Gemini API keys failed. Last error: ${lastError?.message}`)
+    return result.text
+  })
 }
